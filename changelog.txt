@@ -1,0 +1,5 @@
+
+TinyES3 ChangeLog
+
+= Version 1.00 / 1.00, 25.08.2021
+   * First version for GitHub.

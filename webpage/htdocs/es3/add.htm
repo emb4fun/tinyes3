@@ -1,0 +1,238 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html>
+  <head>
+    <meta http-equiv="content-type"     content="text/html;charset=iso-8859-1"/>
+    <meta http-equiv="content-language" content="en"/>
+    <meta http-equiv="pragma"           content="no-cache"/>
+    <title><%sys_longname%></title>
+    <link rel="stylesheet" type="text/css" href="../css/style.css"/>          
+    <script type="text/javascript" src="../js/system.js"></script>
+    <script type="text/javascript" src="../js/es3.js"></script>
+    <script type="text/javascript">
+    <!--
+
+      var user;
+
+      function MySubmit1()
+      {
+         let ajax;
+         let data;
+
+         data = JSON.stringify({ index : user, user : document.formular1.text.value });
+         ajax = GetAjaxObject();
+         ajax.open("POST", "/cgi-bin/es3_add.cgi", true);  
+         ajax.onreadystatechange = function() 
+         {
+            if ((this.readyState == 4) && (this.status == 200))
+            {
+               let jdata = JSON.parse(this.responseText);
+               let err = jdata.err;
+               let msg = jdata.msg;
+               
+               /* Check for any error */   
+               if (err != 0)
+               {
+                  document.getElementById("tr1_add").style.display = "none";
+                  document.getElementById("tr1_msg").innerHTML = Error2Text(err);
+                  document.getElementById("tr1_err").style.display = "block";
+               } 
+               else
+               {
+                  document.getElementById("tr1_add").style.display = "none";
+                  document.getElementById("tr1_ok").style.display = "block";
+               }
+            
+            } // if ((this.readyState == 4) && (this.status == 200))
+         } // end ajax.onreadystatechange
+         ajax.send(data);
+      }
+
+      /**************************************************************/
+    
+      function Ready()
+      {
+         let islocked = parseInt('<%es3_is_locked%>');
+         
+         if (isNaN(islocked)) islocked = 1;
+         
+         if (0 == islocked)
+         {
+            user = GetURLParameter('user');
+         
+            document.getElementById("tr0").style.display = "none";
+            document.getElementById("tr1").style.display = "block";
+         }
+         else
+         {
+            document.getElementById("tr0").style.display = "block";
+            document.getElementById("tr1").style.display = "none";
+         }
+      }
+      
+    -->
+    </script>
+  </head>        
+
+  <body bgcolor="#ffffff" onload="Ready()">
+    <table class="table_body">
+      <tr align="center">
+        <td> 
+        
+          <!-- Header -->
+          <div class="header">
+            <h1><%sys_longname%></h1>
+            <div class="div"></div>
+            <div class="login"><a href="../logout.htm">Logout</a></div>
+            <div class="logo"></div>
+          </div>
+      
+          <!-- Navigation #1 -->
+          <table class="table_navi1">
+            <tr>
+              <td>&nbsp;</td>
+              <td class="main">
+                <ul>
+                  <li class="nb"><a href="../home/index.htm">Home</a></li>
+                  <li class="nm"><a class="active" href="index.htm">ES3</a></li>
+                  <li class="ne"><a href="../main/index.htm">Maintenance</a></li>
+                </ul>
+              </td>
+              <td>&nbsp;</td>
+            </tr>
+          </table> 
+
+          <!-- Navigation #2, #3 -->
+          <div class="navi2">
+            <ul>
+              <li class="nb"><a href="index.htm">Overview</a></li>
+              <li class="nm"><a href="unlock.htm">Unlock / Lock</a></li>
+              <li class="ne"><a class="active" href="user.htm">User</a></li>
+            </ul>
+            <p><%sys_shortname%></p>
+          </div> 
+          <div class="navi3"></div>
+
+
+          <!-- table_row #0 -->
+          <div id="tr0" style="display:none">
+            <table class="table_row">
+              <tr align="center">
+                <td>
+               
+                  <table class="table_variable">
+                    <thead>
+                      <tr>
+                        <td>&nbsp;</td>
+                        <td>Encryped key storage (EKS)</td>
+                        <td>&nbsp;</td>
+                      </tr>                            
+                    </thead>
+                  
+                    <tbody>
+                      <tr>
+                        <td>&nbsp;</td>
+                        <td>
+                          <p>The encrypted keystore is currently still locked. Please unlock first.</p>
+                        </td>
+                        <td>&nbsp;</td>
+                      </tr>
+                    </tbody>
+                  
+                    <tfoot>
+                      <tr>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                      </tr>                            
+                    </tfoot>                            
+                  </table>
+                  
+                </td>                            
+              </tr>
+            </table>
+          </div>  
+          <!-- table_row #0 -->
+
+
+          <!-- table_row #1 -->
+          <div id="tr1" style="display:none">
+            <table class="table_row">
+              <tr align="center">
+                <td>
+               
+                  <table class="table_variable">
+                    <thead>
+                      <tr>
+                        <td>&nbsp;</td>
+                        <td>Add User</td>
+                        <td>&nbsp;</td>
+                      </tr>                            
+                    </thead>
+                  
+                    <tbody>
+                      <tr>
+                        <td>&nbsp;</td>
+                        <td>
+                        
+                          <div class="content" style="text-align:center">
+                          
+                            <div id="tr1_err" style="display:none">
+                              <p style="text-align:center; font-weight:bold">
+                                <br><br><span id="tr1_msg">error</span><br><br>
+                              </p>
+                            </div>
+
+                            <div id="tr1_ok" style="display:none">
+                              <p style="text-align:center; font-weight:bold">
+                                <br><br>The new user has been added successfully.<br><br>
+                              </p>
+                            </div>
+
+                            <div id="tr1_add" style="display:block">
+                              <form name="formular1" method="post">
+                                 <p style="text-align:center">
+                                   <br><br>Please add the new user&apos;s public key here:
+                                   <br><br>
+                                 </p>
+                            
+                                 <p style="text-align:center">
+                                   <textarea style="width:500px" id="tr1_key" class="textarea monospace" name="text" rows="3" autofocus=""></textarea>
+                                 </p>
+
+                                 <button class="play" type="button" name="button1" value="submit" onclick="javascript:MySubmit1()">
+                                   Add
+                                 </button>
+                                 <button class="cancel" type="reset" name="button2" value="cancel">
+                                   Cancel
+                                 </button>
+                              </form>
+                            </div>
+                          </div>
+                        
+                        </td>
+                        <td>&nbsp;</td>
+                      </tr>
+                    </tbody>
+                  
+                    <tfoot>
+                      <tr>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                      </tr>                            
+                    </tfoot>                            
+                  </table>
+                  
+                </td>                            
+              </tr>
+            </table>
+          </div>  
+          <!-- table_row #1 -->
+
+
+        </td>
+      </tr>
+    </table> <!-- table_body -->
+  </body>
+</html>
