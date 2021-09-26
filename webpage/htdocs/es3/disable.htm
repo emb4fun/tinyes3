@@ -11,6 +11,7 @@
     <script type="text/javascript" src="../js/es3.js"></script>
     <script type="text/javascript">
     <!--
+      var LogoutSec = <%sys_logout_sec%>;
     
       var slot;
       var key;
@@ -77,6 +78,8 @@
             document.getElementById("tr0").style.display = "block";
             document.getElementById("tr1").style.display = "none";
          }
+         
+         LogoutCheck();
       }
       
     -->
@@ -92,7 +95,7 @@
           <div class="header">
             <h1><%sys_longname%></h1>
             <div class="div"></div>
-            <div class="login"><a href="../logout.htm">Logout</a></div>
+            <div class="logout"><a href="../logout.htm">Logout in <span id="lc"></span> s</a></div>
             <div class="logo"></div>
           </div>
       

@@ -68,6 +68,8 @@
 
       function MySubmit1()
       {
+         document.getElementById("tr1_err").style.display = "none";
+      
          /* Check if a "user" and "password" is available */
          if (document.formular1.user.value === "") return;
          if (document.formular1.pass.value === "") return;
