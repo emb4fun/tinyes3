@@ -24,9 +24,6 @@
   <ProjectSessionItem path="tiny-es3"/>
   <ProjectSessionItem path="tiny-es3;tiny-es3"/>
   <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files"/>
-  <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files;common"/>
-  <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files;common;library"/>
-  <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files;common;library;ipweb"/>
   <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files;src"/>
   <ProjectSessionItem path="tiny-es3;tiny-es3;System Files"/>
  </Project>
@@ -61,7 +58,7 @@
   <Watches active="0" update="Never"/>
  </Watch4>
  <Files>
-  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="540" useTextEdit="1" openedFrom="" useBinaryEdit="0" left="0" path="../src/main.c" selected="1" top="530" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="594" useTextEdit="1" openedFrom="" useBinaryEdit="0" left="0" path="../src/main.c" selected="1" top="578" codecName="Default"/>
  </Files>
- <ARMCrossStudioWindow activeProject="tiny-es3" fileDialogDefaultFilter="*.c;*.cpp;*.cxx;*.cc;*.h;*.hpp;*.hxx" autoConnectTarget="J-Link" buildConfiguration="RAM Release" sessionSettings="" debugSearchFileMap="" fileDialogInitialDirectory="D:/Projekte/Embedded/Tiny/TinyES3/source/common/library/mbedtls/library" debugSearchPath="" autoConnectCapabilities="3199"/>
+ <ARMCrossStudioWindow activeProject="tiny-es3" fileDialogDefaultFilter="*.c;*.cpp;*.cxx;*.cc;*.h;*.hpp;*.hxx" autoConnectTarget="J-Link" buildConfiguration="RAM Release" sessionSettings="" debugSearchFileMap="" fileDialogInitialDirectory="D:/Projekte/GitHub/tinyes3/source/common/library/mbedtls/library" debugSearchPath="" autoConnectCapabilities="3199"/>
 </session>
