@@ -734,11 +734,11 @@ end:
 /*************************************************************************/
 /*  SlotUpdate                                                           */
 /*                                                                       */
-/*  In    : bSlot                                                        */
+/*  In    : wSlot                                                        */
 /*  Out   : none                                                         */
 /*  Return: 0 = OK / -1 = ERROR                                          */
 /*************************************************************************/
-static int SlotUpdate (uint8_t bSlot)
+static int SlotUpdate (uint16_t wSlot)
 {
    int               rc = ES3_ERR_SLOT;
    int               fd;
@@ -747,10 +747,10 @@ static int SlotUpdate (uint8_t bSlot)
    char              SlotName[24];
 
    /* Check valid range only 1 to SLOT_MAX_CNT-1, 0 is RoT */
-   if ((0 == bSlot) || (bSlot >= SLOT_MAX_CNT)) GOTO_END(ES3_ERR_SLOT);
+   if ((0 == wSlot) || (wSlot >= SLOT_MAX_CNT)) GOTO_END(ES3_ERR_SLOT);
 
    /* Copy slot data */   
-   pSlot = &SlotArray[bSlot];
+   pSlot = &SlotArray[wSlot];
    memcpy(&Dummy, pSlot, sizeof(ES3_SLOT));
 
    /*  Enrypt slot */
@@ -758,7 +758,7 @@ static int SlotUpdate (uint8_t bSlot)
    if (rc != ES3_OK) GOTO_END(ES3_ERR_SLOT_ENCRYPT);
    
    /* Write encrypted slot data */
-   snprintf(SlotName, sizeof(SlotName), "SD0:/eks/slot%02d.key", bSlot);
+   snprintf(SlotName, sizeof(SlotName), "SD0:/eks/slot%03d.key", wSlot);
    fd = _open(SlotName, _O_BINARY | _O_WRONLY | _O_CREATE_ALWAYS);
    if (-1 == fd) GOTO_END(ES3_ERR_SLOT_WRITE);
    
@@ -783,11 +783,11 @@ end:
 /*************************************************************************/
 /*  SlotCreate                                                           */
 /*                                                                       */
-/*  In    : bSlot, pName                                                 */
+/*  In    : wSlot, pName                                                 */
 /*  Out   : none                                                         */
 /*  Return: 0 = OK / -1 = ERROR                                          */
 /*************************************************************************/
-static int SlotCreate (uint8_t bSlot, char *pName)
+static int SlotCreate (uint16_t wSlot, char *pName)
 {
    int                             rc = ES3_ERR_SLOT;
    int                             res;
@@ -806,8 +806,8 @@ static int SlotCreate (uint8_t bSlot, char *pName)
    mbedtls_entropy_init(&entropy);
    
    /* Check valid slot index */
-   if (bSlot >= SLOT_MAX_CNT) GOTO_END(ES3_ERR_SLOT); 
-   pSlot = &SlotArray[bSlot];
+   if (wSlot >= SLOT_MAX_CNT) GOTO_END(ES3_ERR_SLOT); 
+   pSlot = &SlotArray[wSlot];
    
    /* Prepare slot content */
    memset(pSlot, 0x00, sizeof(ES3_SLOT));
@@ -845,7 +845,7 @@ static int SlotCreate (uint8_t bSlot, char *pName)
    if (rc != 0) GOTO_END(ES3_ERR_SLOT_ENCRYPT);
 
    /* Write encrypted slot data */
-   snprintf(SlotName, sizeof(SlotName), "SD0:/eks/slot%02d.key", bSlot);
+   snprintf(SlotName, sizeof(SlotName), "SD0:/eks/slot%03d.key", wSlot);
    fd = _open(SlotName, _O_BINARY | _O_WRONLY | _O_CREATE_ALWAYS);
    if (-1 == fd) GOTO_END(ES3_ERR_SLOT_WRITE);
    
@@ -921,19 +921,39 @@ static int EKSUnlock (void)
    int        rc = ES3_ERROR;
    int        fd;
    ES3_SLOT *pSlot = NULL;
-   BYTE      bSlot;
+   uint16_t  wSlot;
    char       SlotName[24];
    
    /* Read and decrypt the complete slot data */
    
    /* Clear slot array first */
    memset(SlotArray, 0x00, sizeof(SlotArray));
-   for(bSlot = 0; bSlot < SLOT_MAX_CNT; bSlot++)
+   for(wSlot = 0; wSlot < SLOT_MAX_CNT; wSlot++)
    {
-      pSlot = &SlotArray[bSlot];
+      pSlot = &SlotArray[wSlot];
       
-      snprintf(SlotName, sizeof(SlotName), "SD0:/eks/slot%02d.key", bSlot);
-      fd = _open(SlotName, _O_BINARY | _O_RDONLY);
+      /* 
+       * For compatibility with older version check for 
+       * "SlotXX.key" and "SlotXXX.key"
+       */      
+      if (wSlot < 100)
+      {
+         /* Version which supports only 0 to 99 slots */
+         snprintf(SlotName, sizeof(SlotName), "SD0:/eks/slot%02d.key", wSlot);
+         fd = _open(SlotName, _O_BINARY | _O_RDONLY);
+         if (-1 == fd)
+         {
+            /* Version which supports more than 99 slots */
+            snprintf(SlotName, sizeof(SlotName), "SD0:/eks/slot%03d.key", wSlot);
+            fd = _open(SlotName, _O_BINARY | _O_RDONLY);
+         }
+      }
+      else
+      {
+         snprintf(SlotName, sizeof(SlotName), "SD0:/eks/slot%d.key", wSlot);
+         fd = _open(SlotName, _O_BINARY | _O_RDONLY);
+      }   
+      
       if (fd != -1)
       {
          rc = _read(fd, pSlot, sizeof(ES3_SLOT));
@@ -953,7 +973,7 @@ static int EKSUnlock (void)
             }
          }
       } /* end open file */
-   } /* end for(bSlot = 0; bSlot < SLOT_MAX_CNT; bSlot++) */
+   } /* end for(wSlot = 0; wSlot < SLOT_MAX_CNT; wSlot++) */
    
    /* Check the first slot for ROOT_OF_TRUST */
    if (0 == strcmp((char*)SlotArray[0].Name, ROOT_OF_TRUST))
@@ -1494,8 +1514,8 @@ end:
 static int cgi_create_eks (HTTPD_SESSION *hs)
 {
    int      rc;
-   uint8_t bSlot;
-   uint8_t bIndex;
+   uint16_t wSlot;
+   uint16_t wIndex;
    char   *pSlot;
    char   *pKey;
    char   *pChar;
@@ -1512,8 +1532,8 @@ static int cgi_create_eks (HTTPD_SESSION *hs)
    if (NULL == pSlot) GOTO_END(ES3_ERROR);
    if (0 == *pSlot) GOTO_END(ES3_ERROR);
    
-   bSlot = (uint8_t)atoi(pSlot);
-   if ((0 == bSlot) || (bSlot >= SLOT_MAX_CNT)) GOTO_END(ES3_ERROR);
+   wSlot = (uint8_t)atoi(pSlot);
+   if ((0 == wSlot) || (wSlot >= SLOT_MAX_CNT)) GOTO_END(ES3_ERROR);
 
    pKey = IP_JSON_GetString(&JSON, "key");
    if (NULL == pKey) GOTO_END(ES3_ERROR);
@@ -1531,25 +1551,25 @@ static int cgi_create_eks (HTTPD_SESSION *hs)
    if (STATUS_UNLOCKED != nEKSStatus) GOTO_END(ES3_ERR_NO_UNLOCK);
 
    /* Check if slot is in use */
-   if (SlotArray[bSlot].dID != MBEDTLS_ECP_DP_NONE) GOTO_END(ES3_ERROR);
+   if (SlotArray[wSlot].dID != MBEDTLS_ECP_DP_NONE) GOTO_END(ES3_ERROR);
 
    /* Check key name policy */   
    rc = CheckKeyNameRules(pKey);
    if (ES3_OK == rc)
    {
       /* Check if the key is still available */   
-      for(bIndex = 0; bIndex < SLOT_MAX_CNT; bIndex++)
+      for(wIndex = 0; wIndex < SLOT_MAX_CNT; wIndex++)
       {
          /* Check if slot is in use */
-         if (SlotArray[bIndex].dID != MBEDTLS_ECP_DP_NONE)
+         if (SlotArray[wIndex].dID != MBEDTLS_ECP_DP_NONE)
          {
             /* Check if the key is still available */
-            if (0 == strcmp((char*)SlotArray[bIndex].Name, pKey)) GOTO_END(ES3_ERR_KEY_DUPLICAT);
+            if (0 == strcmp((char*)SlotArray[wIndex].Name, pKey)) GOTO_END(ES3_ERR_KEY_DUPLICAT);
          }
       }
    
       /* Create new key */
-      rc = SlotCreate(bSlot, pKey);
+      rc = SlotCreate(wSlot, pKey);
    }      
 
 end:  
@@ -1572,7 +1592,7 @@ end:
 static int cgi_disable_slot (HTTPD_SESSION *hs)
 {
    int      rc;
-   uint8_t bSlot;
+   uint16_t wSlot;
    char   *pSlot;
    json_t   JSON;   
 
@@ -1586,18 +1606,18 @@ static int cgi_disable_slot (HTTPD_SESSION *hs)
    pSlot = IP_JSON_GetString(&JSON, "slot");
    if (NULL == pSlot) GOTO_END(ES3_ERROR);
    
-   bSlot = (uint8_t)atoi(pSlot);
-   if ((0 == bSlot) || (bSlot >= SLOT_MAX_CNT)) GOTO_END(ES3_ERROR);
+   wSlot = (uint8_t)atoi(pSlot);
+   if ((0 == wSlot) || (wSlot >= SLOT_MAX_CNT)) GOTO_END(ES3_ERROR);
    
    /* Check for UNLOCK mode */
    if (STATUS_UNLOCKED != nEKSStatus) GOTO_END(ES3_ERR_NO_UNLOCK);
 
    /* Check if slot is used and enabled */   
-   if ((SlotArray[bSlot].dID != MBEDTLS_ECP_DP_NONE) && (SLOT_FLAG_ENABLE == (SlotArray[bSlot].dFlags & SLOT_FLAG_ENABLE)))
+   if ((SlotArray[wSlot].dID != MBEDTLS_ECP_DP_NONE) && (SLOT_FLAG_ENABLE == (SlotArray[wSlot].dFlags & SLOT_FLAG_ENABLE)))
    {
-      SlotArray[bSlot].dFlags &= ~SLOT_FLAG_ENABLE;
+      SlotArray[wSlot].dFlags &= ~SLOT_FLAG_ENABLE;
       
-      rc = SlotUpdate(bSlot);
+      rc = SlotUpdate(wSlot);
    }
    else
    {
@@ -1624,7 +1644,7 @@ end:
 static int cgi_enable_slot (HTTPD_SESSION *hs)
 {
    int      rc;
-   uint8_t bSlot;
+   uint16_t wSlot;
    char   *pSlot;
    json_t   JSON;   
 
@@ -1638,18 +1658,18 @@ static int cgi_enable_slot (HTTPD_SESSION *hs)
    pSlot = IP_JSON_GetString(&JSON, "slot");
    if (NULL == pSlot) GOTO_END(ES3_ERROR);
    
-   bSlot = (uint8_t)atoi(pSlot);
-   if ((0 == bSlot) || (bSlot >= SLOT_MAX_CNT)) GOTO_END(ES3_ERROR);
+   wSlot = (uint8_t)atoi(pSlot);
+   if ((0 == wSlot) || (wSlot >= SLOT_MAX_CNT)) GOTO_END(ES3_ERROR);
 
    /* Check for UNLOCK mode */
    if (STATUS_UNLOCKED != nEKSStatus) GOTO_END(ES3_ERR_NO_UNLOCK);
 
    /* Check if slot is used and disabled */   
-   if ((SlotArray[bSlot].dID != MBEDTLS_ECP_DP_NONE) && (0 == (SlotArray[bSlot].dFlags & SLOT_FLAG_ENABLE)))
+   if ((SlotArray[wSlot].dID != MBEDTLS_ECP_DP_NONE) && (0 == (SlotArray[wSlot].dFlags & SLOT_FLAG_ENABLE)))
    {
-      SlotArray[bSlot].dFlags |= SLOT_FLAG_ENABLE;
+      SlotArray[wSlot].dFlags |= SLOT_FLAG_ENABLE;
       
-      rc = SlotUpdate(bSlot);
+      rc = SlotUpdate(wSlot);
    }
    else
    {
@@ -1676,7 +1696,7 @@ end:
 static int cgi_pkey_slot (HTTPD_SESSION *hs)
 {
    int         rc;
-   uint8_t    bSlot = 0;
+   uint16_t   wSlot = 0;
    char      *pSlot;
    char      *pChar;
    json_t      JSON; 
@@ -1691,14 +1711,14 @@ static int cgi_pkey_slot (HTTPD_SESSION *hs)
    pSlot = IP_JSON_GetString(&JSON, "slot");
    if (NULL == pSlot) GOTO_END(ES3_ERROR);
    
-   bSlot = (uint8_t)atoi(pSlot);
-   if (bSlot >= SLOT_MAX_CNT) GOTO_END(ES3_ERROR);
+   wSlot = (uint8_t)atoi(pSlot);
+   if (wSlot >= SLOT_MAX_CNT) GOTO_END(ES3_ERROR);
 
    /* Check for UNLOCK mode */
    if (STATUS_UNLOCKED != nEKSStatus) GOTO_END(ES3_ERR_NO_UNLOCK);
 
    /* Check if slot is used and enabled */   
-   if ((SlotArray[bSlot].dID != MBEDTLS_ECP_DP_NONE) && (SLOT_FLAG_ENABLE == (SlotArray[bSlot].dFlags & SLOT_FLAG_ENABLE)))
+   if ((SlotArray[wSlot].dID != MBEDTLS_ECP_DP_NONE) && (SLOT_FLAG_ENABLE == (SlotArray[wSlot].dFlags & SLOT_FLAG_ENABLE)))
    {
       rc = ES3_OK;
    }
@@ -1712,7 +1732,7 @@ end:
    if (ES3_OK == rc)
    {
       /* Output public key */ 
-      pChar = (char*)SlotArray[bSlot].Pub;
+      pChar = (char*)SlotArray[wSlot].Pub;
       while (*pChar != 0)
       {
          s_putchar(hs->s_stream, *pChar);
@@ -1909,7 +1929,7 @@ end:
 /*************************************************************************/
 static int cgi_eks_table (HTTPD_SESSION *hs)
 {
-   uint8_t   bSlot;
+   uint16_t  wSlot;
    uint16_t  wDim;
    ES3_SLOT *pSlot = NULL;
 
@@ -1928,7 +1948,7 @@ static int cgi_eks_table (HTTPD_SESSION *hs)
    else
    {
       wDim = 0;
-      for(bSlot = 0; bSlot < SLOT_MAX_CNT; bSlot++)
+      for(wSlot = 0; wSlot < SLOT_MAX_CNT; wSlot++)
       {
          if (0 == (wDim & 0x01))
          {
@@ -1941,9 +1961,9 @@ static int cgi_eks_table (HTTPD_SESSION *hs)
 
 
          s_printf(hs->s_stream, "  <td>&nbsp;</td>\r\n");
-         s_printf(hs->s_stream, "  <td>&nbsp;%02d</td>\r\n", bSlot);
+         s_printf(hs->s_stream, "  <td>&nbsp;%03d</td>\r\n", wSlot);
          
-         pSlot = &SlotArray[bSlot];
+         pSlot = &SlotArray[wSlot];
          /* Check for a valid slot */
          if (pSlot->dID != MBEDTLS_ECP_DP_NONE)
          {
@@ -1951,10 +1971,10 @@ static int cgi_eks_table (HTTPD_SESSION *hs)
             s_printf(hs->s_stream, "  <td>secp256r1 (NIST P-256)</td>\r\n");
             
             /* Special handling for slot 0 */
-            if (0 == bSlot)
+            if (0 == wSlot)
             {
                /* Root of Trust */
-               s_printf(hs->s_stream, "  <td><a href=\"pkey.htm?slot=%d&key=%s\">Public Key</a></td>\r\n", bSlot, pSlot->Name);
+               s_printf(hs->s_stream, "  <td><a href=\"pkey.htm?slot=%d&key=%s\">Public Key</a></td>\r\n", wSlot, pSlot->Name);
             }
             else
             {
@@ -1962,12 +1982,12 @@ static int cgi_eks_table (HTTPD_SESSION *hs)
                if (SLOT_FLAG_ENABLE == (pSlot->dFlags & SLOT_FLAG_ENABLE))
                {
                   /* Slot is enabled */
-                  s_printf(hs->s_stream, "  <td><a href=\"disable.htm?slot=%d&key=%s\">Disable</a>, <a href=\"pkey.htm?slot=%d&key=%s\">Public Key</a></td>\r\n", bSlot, pSlot->Name, bSlot, pSlot->Name);
+                  s_printf(hs->s_stream, "  <td><a href=\"disable.htm?slot=%d&key=%s\">Disable</a>, <a href=\"pkey.htm?slot=%d&key=%s\">Public Key</a></td>\r\n", wSlot, pSlot->Name, wSlot, pSlot->Name);
                }   
                else
                {
                   /* Slot is disabled */
-                  s_printf(hs->s_stream, "  <td><a href=\"enable.htm?slot=%d&key=%s\">Enable</a></td>\r\n", bSlot, pSlot->Name);
+                  s_printf(hs->s_stream, "  <td><a href=\"enable.htm?slot=%d&key=%s\">Enable</a></td>\r\n", wSlot, pSlot->Name);
                }
             }   
          }
@@ -1975,7 +1995,7 @@ static int cgi_eks_table (HTTPD_SESSION *hs)
          {
             s_printf(hs->s_stream, "  <td>--- Empty Slot ---</td>\r\n");
             s_printf(hs->s_stream, "  <td>---</td>\r\n");
-            s_printf(hs->s_stream, "  <td><a href=\"create.htm?slot=%d\">Create</a></td>\r\n",  bSlot);
+            s_printf(hs->s_stream, "  <td><a href=\"create.htm?slot=%d\">Create</a></td>\r\n", wSlot);
          }
 
          s_printf(hs->s_stream, "  <td>&nbsp;</td>\r\n");
@@ -2124,7 +2144,7 @@ static const CGI_LIST_ENTRY CGIList[] =
 static int VerifyRPC (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
 {  
    int                      rc = ES3_RPC_ERROR;
-   uint8_t                 bSlot;
+   uint16_t                wSlot;
    uint8_t                 bUser;
    ES3_SLOT               *pSlot = NULL;
    ES3_USER               *pUser = NULL;
@@ -2163,10 +2183,10 @@ static int VerifyRPC (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
     * 2. Check if slot is available 
     */
    rc = ES3_RPC_ERROR; 
-   for(bSlot = 0; bSlot < SLOT_MAX_CNT; bSlot++)
+   for(wSlot = 0; wSlot < SLOT_MAX_CNT; wSlot++)
    {
       /* Get slot data */
-      pSlot = &SlotArray[bSlot];
+      pSlot = &SlotArray[wSlot];
       
       /* Check for a valid slot */
       if (pSlot->dID != MBEDTLS_ECP_DP_NONE)
@@ -2269,7 +2289,7 @@ end:
 static void HandleSignReq (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
 {
    int                      rc = ES3_RPC_ERROR;
-   uint8_t                 bSlot;
+   uint16_t                wSlot;
    ES3_SLOT               *pSlot = NULL;
    size_t                   len;
    mbedtls_pk_context       ctx;
@@ -2303,10 +2323,10 @@ static void HandleSignReq (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
    /* 
     * Check if slot is available 
     */
-   for(bSlot = 0; bSlot < SLOT_MAX_CNT; bSlot++)
+   for(wSlot = 0; wSlot < SLOT_MAX_CNT; wSlot++)
    {
       /* Get slot data */
-      pSlot = &SlotArray[bSlot];
+      pSlot = &SlotArray[wSlot];
       
       /* Check for a valid slot */
       if (pSlot->dID != MBEDTLS_ECP_DP_NONE)
@@ -2368,7 +2388,7 @@ end:
 static void HandlePubReq (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
 {
    int          rc = ES3_RPC_ERROR;
-   uint8_t     bSlot;
+   uint16_t    wSlot;
    ES3_SLOT   *pSlot = NULL;
    size_t       len;
    
@@ -2392,10 +2412,10 @@ static void HandlePubReq (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
    /* 
     * Check if slot is available 
     */
-   for(bSlot = 0; bSlot < SLOT_MAX_CNT; bSlot++)
+   for(wSlot = 0; wSlot < SLOT_MAX_CNT; wSlot++)
    {
       /* Get slot data */
-      pSlot = &SlotArray[bSlot];
+      pSlot = &SlotArray[wSlot];
       
       /* Check for a valid slot */
       if (pSlot->dID != MBEDTLS_ECP_DP_NONE)
@@ -2434,7 +2454,7 @@ end:
 /*************************************************************************/
 static void HandleGetList (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
 {
-   uint8_t     bSlot;
+   uint16_t    wSlot;
    uint8_t     bIndex;
    ES3_SLOT   *pSlot = NULL;
    
@@ -2463,10 +2483,10 @@ static void HandleGetList (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
    memset(pTxMsg->Data.rGetList.SlotArray, 0x00, sizeof(pTxMsg->Data.rGetList.SlotArray));    
     
    bIndex = 0; 
-   for(bSlot = 0; bSlot < SLOT_MAX_CNT; bSlot++)
+   for(wSlot = 0; wSlot < SLOT_MAX_CNT; wSlot++)
    {
       /* Get slot data */
-      pSlot = &SlotArray[bSlot];
+      pSlot = &SlotArray[wSlot];
       
       /* Check for a valid slot */
       if (pSlot->dID != MBEDTLS_ECP_DP_NONE)
@@ -2545,8 +2565,8 @@ static void ES3Task (void *arg)
    struct sockaddr_in Server;
    struct sockaddr_in Source;
    int                SourceLen;  
-   static uint8_t     RxBuffer[2048];
-   static uint8_t     TxBuffer[2048];
+   static uint8_t     RxBuffer[ sizeof(es3_msg_t) ];
+   static uint8_t     TxBuffer[ sizeof(es3_msg_t) ];
    es3_msg_t        *pRxMsg;
    es3_msg_t        *pTxMsg;
    
@@ -2615,7 +2635,7 @@ static void ES3Task (void *arg)
 /*=======================================================================*/
 
 /*************************************************************************/
-/*  IPWebsWAInit                                                         */
+/*  es3_Init                                                             */
 /*                                                                       */
 /*  Initialize the ES3 functionality of the web server.                  */
 /*                                                                       */
