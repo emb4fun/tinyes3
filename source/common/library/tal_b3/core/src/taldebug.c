@@ -1,7 +1,7 @@
 /**************************************************************************
 *  This file is part of the TAL project (Tiny Abstraction Layer)
 *
-*  Copyright (c) 2014 by Michael Fischer (www.emb4fun.de).
+*  Copyright (c) 2014-2023 by Michael Fischer (www.emb4fun.de).
 *  All rights reserved.
 *
 *  Redistribution and use in source and binary forms, with or without 
@@ -31,11 +31,6 @@
 *  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF 
 *  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
 *  SUCH DAMAGE.
-*
-***************************************************************************
-*  History:
-*
-*  11.02.2014  mifi  First Version.
 **************************************************************************/
 #define __TALDEBUG_C__
 
@@ -123,7 +118,8 @@ void TAL_FATAL (const char *func, const char *file, int line, const char *expect
    else
    {
       term_printf("%s:%d: Failed: in %s\n", file, line, func);
-   }   
+   }  
+   
    while (1)
    {
       __asm__ ("nop");

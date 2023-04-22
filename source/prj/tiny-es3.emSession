@@ -5,9 +5,7 @@
   <Exceptions set="Reset;Undef;P_Abort;D_Abort"/>
  </Breakpoints>
  <ExecutionProfileWindow/>
- <FrameBufferWindow>
-  <FrameBufferWindow bufferHeight="-1" addressSpace="" addressText="" bufferWidth="-1"/>
- </FrameBufferWindow>
+ <FrameBuffer/>
  <Memory1>
   <MemoryWindow addressSpace="" dataSize="1" autoEvaluate="0" viewMode="0" viewType="4" addressOrder="0" columnsText="" refreshPeriod="0" name="tiny-es3" sizeText="256" addressText="0x800989bc"/>
   <MemoryWindow addressSpace="" dataSize="1" autoEvaluate="0" viewMode="0" viewType="4" addressOrder="0" columnsText="" refreshPeriod="0" name="tiny-es3_RAM Debug" sizeText="256" addressText="0x800989bc"/>
@@ -28,6 +26,11 @@
   <ProjectSessionItem path="tiny-es3"/>
   <ProjectSessionItem path="tiny-es3;tiny-es3"/>
   <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files"/>
+  <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files;common"/>
+  <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files;common;library"/>
+  <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files;common;library;uhttp"/>
+  <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files;common;library;uhttp;modules"/>
+  <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files;common;src"/>
   <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files;src"/>
  </Project>
  <Register1>
@@ -65,7 +68,8 @@
   <Watches active="0" update="Never"/>
  </Watch4>
  <Files>
-  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="590" useTextEdit="1" path="../src/main.c" left="0" selected="1" top="578" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="590" useTextEdit="1" path="../src/main.c" left="0" top="578" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="9" y="46" useTextEdit="1" path="../common/src/cert.c" left="0" selected="1" top="11" codecName="Default"/>
  </Files>
- <EMStudioWindow activeProject="tiny-es3" fileDialogDefaultFilter="*.c" autoConnectTarget="J-Link" buildConfiguration="RAM Release" sessionSettings="" debugSearchFileMap="" fileDialogInitialDirectory="D:/Projekte/GitHub/tinyes3/source/prj" debugSearchPath="" autoConnectCapabilities="3199"/>
+ <EMStudioWindow activeProject="tiny-es3" fileDialogDefaultFilter="*.c" autoConnectTarget="J-Link" buildConfiguration="RAM Debug" sessionSettings="" debugSearchFileMap="" fileDialogInitialDirectory="D:/Projekte/GitHub/tinyes3/source/prj" debugSearchPath="" autoConnectCapabilities="3199"/>
 </session>

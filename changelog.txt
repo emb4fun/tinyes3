@@ -1,5 +1,22 @@
+***************************************************************************
+* Project: tinyes3
+* Name   : "An Embedded Secure Signing Server."
+* Target : BeagleBone Black
+* Version: 20230422
+***************************************************************************
+* Tools  : SEGGER Embedded Studio for ARM v7.12a
+***************************************************************************
+* URL    : https://www.emb4fun.de/projects/tes3/index.html
+***************************************************************************
 
-TinyES3 ChangeLog
+= 22.04.2023
+   * Updated MbedTLS to v2.28.3
+   * Used SEGGER Embedded Studio for ARM v7.12a.
+   * Updated tal and tcts headers.
+   * Updated tcts functionality.
+   * Added and used old FatFs function mem_set, mem_cmp and chk_chr.
 
 = Version 1.00 / 1.00, 25.08.2021
    * First version for GitHub.
+
+***************************************************************************

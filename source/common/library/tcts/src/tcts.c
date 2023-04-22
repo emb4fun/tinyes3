@@ -1,35 +1,35 @@
 /**************************************************************************
 *  This file is part of the TCTS project (Tiny Cooperative Task Scheduler)
 *
-*  Copyright (c) 2014 by Michael Fischer (www.emb4fun.de).
+*  Copyright (c) 2014-2023 by Michael Fischer (www.emb4fun.de).
 *  All rights reserved.
 *
-*  Redistribution and use in source and binary forms, with or without 
-*  modification, are permitted provided that the following conditions 
+*  Redistribution and use in source and binary forms, with or without
+*  modification, are permitted provided that the following conditions
 *  are met:
-*  
-*  1. Redistributions of source code must retain the above copyright 
+*
+*  1. Redistributions of source code must retain the above copyright
 *     notice, this list of conditions and the following disclaimer.
 *
 *  2. Redistributions in binary form must reproduce the above copyright
-*     notice, this list of conditions and the following disclaimer in the 
+*     notice, this list of conditions and the following disclaimer in the
 *     documentation and/or other materials provided with the distribution.
 *
-*  3. Neither the name of the author nor the names of its contributors may 
-*     be used to endorse or promote products derived from this software 
+*  3. Neither the name of the author nor the names of its contributors may
+*     be used to endorse or promote products derived from this software
 *     without specific prior written permission.
 *
-*  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
-*  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
-*  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS 
-*  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL 
-*  THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, 
-*  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
-*  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS 
-*  OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED 
-*  AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
-*  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF 
-*  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+*  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+*  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+*  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+*  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+*  THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+*  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+*  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+*  OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+*  AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+*  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+*  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 *  SUCH DAMAGE.
 *
 ***************************************************************************
@@ -47,13 +47,13 @@
 *                    Rework OSTaskCreate, schedule new task if
 *                    scheduler is not locked.
 *                    Added OSTaskGetPriority and OSTimeDlyUntil.
-*                    Added event functionality. 
+*                    Added event functionality.
 *  04.02.2016  mifi  Remove OSSemaBroadcast and OSSemaBroadcastAsync.
 *                    Change OSSemaCreate parameter from uint32 to int32.
 *  08.02.2016  mifi  Added "Performance optimisation" switch.
 *  12.02.2016  mifi  Added the some more functionality:
 *                    - OSTaskTerminateRequest and OSTaskShouldTerminate
-*                    - OSTimerSet 
+*                    - OSTimerSet
 *                    - OSSemaReset
 *  05.05.2016  mifi  Added incomplete Mailbox functionality, only:
 *                    - OSMboxCreate
@@ -79,6 +79,8 @@
 *  16.05.2021  mifi  Change version to v0.22.0.
 **************************************************************************/
 #define __TCTS_C__
+
+#if defined(RTOS_TCTS)
 
 /*=======================================================================*/
 /*  Include                                                              */
@@ -106,7 +108,7 @@
    Error: TCTS_ENABLE_PERFORMANCE_OPTIMISATION_NO_STATISTIC must be defined in tcts_conf.h;
 #else
 #define _PERF_OPT_NO_STATISTIC   TCTS_ENABLE_PERFORMANCE_OPTIMISATION_NO_STATISTIC
-#endif    
+#endif
 
 
 /*
@@ -114,22 +116,14 @@
  */
 #if !defined(TCTS_USE_SWWD)
 #define _USE_SWWD    0
-#else 
+#else
 #define _USE_SWWD    TCTS_USE_SWWD
 #endif
 
 #if !defined(TCTS_USE_HWWD)
 #define _USE_HWWD    0
-#else 
-#define _USE_HWWD    TCTS_USE_HWWD
-#endif
-
-#if (_USE_HWWD >= 1)
-#define CPU_INIT_HW_DOG()  tal_CPUInitHWDog
-#define CPU_TRIGGER_DOG()  tal_CPUTriggerHWDog
 #else
-#define CPU_INIT_HW_DOG()
-#define CPU_TRIGGER_DOG()
+#define _USE_HWWD    TCTS_USE_HWWD
 #endif
 
 
@@ -152,7 +146,7 @@
  * Idle, statistic and SW-Watchdog task priority
  */
 #define IDLE_TASK_PRIO        255
-#define STAT_TASK_PRIO        2
+#define STAT_TASK_PRIO        254
 #define SWDOG_TASK_PRIO       3
 
 /*
@@ -163,7 +157,7 @@
 /*
  * Set state of a task
  */
-#if (_PERF_OPT_NO_STATISTIC >= 1) 
+#if (_PERF_OPT_NO_STATISTIC >= 1)
 #define SET_TASK_STATE(_a,_b)
 #else
 #define SET_TASK_STATE(_a,_b) { _a->State = _b; }
@@ -176,7 +170,7 @@
 
 /*=======================================================================*/
 /*  Definition of all global Data                                        */
-/*=======================================================================*/   
+/*=======================================================================*/
 
 /*=======================================================================*/
 /*  Definition of all local Data                                         */
@@ -187,7 +181,10 @@
  */
 static OS_STACK(IdleStack, OS_IDLE_STACK_SIZE);
 static OS_STACK(StatStack, OS_STAT_STACK_SIZE);
+
+#if (_USE_SWWD >= 1)
 static OS_STACK(SWDogStack, OS_SWWD_STACK_SIZE);
+#endif
 
 static OS_TCB TCBIdle;
 static OS_TCB TCBStat;
@@ -214,18 +211,18 @@ static int32_t   dTimezoneDstOffsetSec = 0;
 /*
  * Some statistics variables
  */
-static uint8_t   bStatEnabled       = 0; 
+static uint8_t   bStatEnabled       = 0;
 static uint8_t   bStatCPULoad       = 0;
 static uint32_t  dStatTotalTaskTime = 0;
 static uint32_t  dStatHirResPeriod  = 0;
 
-/* 
- * The TaskList contains all the tasks of the system. 
+/*
+ * The TaskList contains all the tasks of the system.
  */
 static OS_TCB *pTaskList = NULL;
 
-/* 
- * The ReadyList contains the tasks which are ready to run. 
+/*
+ * The ReadyList contains the tasks which are ready to run.
  */
 static os_tcb_fifo_t ReadyList;
 
@@ -251,7 +248,7 @@ static uint32_t      UserTimerTimeout = 0;
 /*
  * Software Watchdog
  */
-static uint8_t bSWDogEnabled = 0; 
+static uint8_t bSWDogEnabled = 0;
 
 /*=======================================================================*/
 /*  Definition of all local Procedures                                   */
@@ -285,6 +282,14 @@ static uint8_t bSWDogEnabled = 0;
 #include "tcts_nios.c"
 #endif
 
+/*
+ * Check for RISC-V style CPU
+ */
+#if defined(__ARCH_RISCV__)
+#include "tcts_riscv.c"
+#endif
+
+
 /*************************************************************************/
 /*  GetStackFreeCount                                                    */
 /*                                                                       */
@@ -298,12 +303,12 @@ static uint8_t bSWDogEnabled = 0;
 static uint32_t GetStackFreeCount (uint8_t *pStart, uint8_t *pEnd)
 {
    uint32_t dFreeCount = 0;
-   
+
    while (pStart < pEnd)
    {
       if (0xCC == *pStart)
       {
-         dFreeCount++;   
+         dFreeCount++;
       }
       else
       {
@@ -311,14 +316,14 @@ static uint32_t GetStackFreeCount (uint8_t *pStart, uint8_t *pEnd)
       }
       pStart++;
    }
-   
+
    return(dFreeCount);
 } /* GetStackFreeCount */
 
 /*************************************************************************/
 /*  TCBFifoAddPrio                                                       */
 /*                                                                       */
-/*  Add the task to the FIFO, with respect to the priority.              */ 
+/*  Add the task to the FIFO, with respect to the priority.              */
 /*                                                                       */
 /*  Note: Interrupts are disabled and must be disabled.                  */
 /*                                                                       */
@@ -337,7 +342,7 @@ static __inline__ void TCBFifoAddPrio (os_tcb_fifo_t *pFifo, OS_TCB *pTask)
    {
       return;
    }
-#endif   
+#endif
 
    /* Check if the fifo is empty */
    if (NULL == pFifo->pIn)
@@ -345,8 +350,8 @@ static __inline__ void TCBFifoAddPrio (os_tcb_fifo_t *pFifo, OS_TCB *pTask)
       /* Fifo is empty */
       pTask->pPrev = NULL;    /* Task has no prev */
       pTask->pNext = NULL;    /* and no next */
-      
-      pFifo->pIn  = pTask;    /* Fifo in and out */      
+
+      pFifo->pIn  = pTask;    /* Fifo in and out */
       pFifo->pOut = pTask;    /* points to the new task */
    }
    else
@@ -369,29 +374,29 @@ static __inline__ void TCBFifoAddPrio (os_tcb_fifo_t *pFifo, OS_TCB *pTask)
                /* Insert in the middle of the fifo */
                pTask->pNext = pList;
                pTask->pPrev = pList->pPrev;
-               
+
                pList->pPrev->pNext = pTask;
                pList->pPrev        = pTask;
             }
             TaskWasAdded = 1;
             break;
          } /* end if (pTask->Prio >= pList->Prio) */
-      
+
          pList = pList->pNext;
       } /* end while (pList != NULL) */
-      
+
       /* Check if task was not added */
       if (0 == TaskWasAdded)
       {
          /* Add Task at the end of the fifo */
          pTask->pNext = NULL;
          pTask->pPrev = pFifo->pOut;
-         
+
          pFifo->pOut->pNext = pTask;
          pFifo->pOut        = pTask;
       }
    }
-   
+
 } /* TCBFifoAddPrio */
 
 /*************************************************************************/
@@ -416,7 +421,7 @@ static __inline__ OS_TCB *TCBFifoRemove (os_tcb_fifo_t *pFifo)
       TAL_FAILED();
       return(NULL);
    }
-   
+
    /* Check if only one element is in the fifo */
    if (pFifo->pIn == pFifo->pOut)
    {
@@ -438,8 +443,8 @@ static __inline__ OS_TCB *TCBFifoRemove (os_tcb_fifo_t *pFifo)
    /* Clear fifo pointer */
    pTask->pPrev = NULL;
    pTask->pNext = NULL;
-#endif   
-         
+#endif
+
    return(pTask);
 } /* TCBFifoRemove */
 
@@ -499,7 +504,7 @@ static __inline__ void TCBFifoRemoveMiddle (os_tcb_fifo_t *pFifo, OS_TCB *pTask)
 /*************************************************************************/
 /*  TaskListAdd                                                          */
 /*                                                                       */
-/*  Add the task to the TaskList.                                        */ 
+/*  Add the task to the TaskList.                                        */
 /*                                                                       */
 /*  Note: Interrupts are disabled and must be disabled.                  */
 /*                                                                       */
@@ -521,23 +526,23 @@ static void TaskListAdd (OS_TCB *pTask)
    else
    {
       pTask->pTaskPrev = NULL;
-      
+
       /*
        * Link the new task in front of the fifo.
        */
       pTask->pTaskNext = pTaskList;
-      
-      /* 
+
+      /*
        * Link the old "first task" back to the new task.
        */
       pTaskList->pTaskPrev = pTask;
-   
+
       /*
        * Set the new fifo->pIn.
        */
       pTaskList = pTask;
    }
-   
+
 } /* TaskListAdd */
 
 /*************************************************************************/
@@ -579,7 +584,7 @@ static void TaskListRemove (OS_TCB *pTask)
          pTask->pTaskPrev->pTaskNext = NULL;
       }
    }
-   
+
 } /* TaskListRemove */
 
 /*************************************************************************/
@@ -596,21 +601,21 @@ static void TaskListRemove (OS_TCB *pTask)
 static __inline__ void AddTaskToWaitList (OS_TCB *pTask)
 {
    os_tcb_fifo_t *pFifo = &WaitList;
-    
+
    SET_TASK_STATE(pTask, OS_TASK_STATE_WAITING);
-   
+
    /*
-    * For the correct order of task processing the task must be 
-    * added at the end. For example, if there exist three tasks, A, B and C 
+    * For the correct order of task processing the task must be
+    * added at the end. For example, if there exist three tasks, A, B and C
     * with the same priority. And the tasks was started in the ABC order the
     * WaitList looks like A->B->C after all tasks was added to the WaitList
     * now.
     *
-    * CheckWaitList will move the tasks later from the WaitList to  
+    * CheckWaitList will move the tasks later from the WaitList to
     * the ReadyList if the timeout is expired. But this will be
     * done with TCBFifoAddPrio. The ReadyList will look like C->B->A.
     *
-    * The task which is started is taken by the scheduler from the 
+    * The task which is started is taken by the scheduler from the
     * end of the ReadyList. Now the order of task processing is correct.
     */
 
@@ -626,19 +631,19 @@ static __inline__ void AddTaskToWaitList (OS_TCB *pTask)
       /* Fifo is empty */
       pTask->pWaitPrev = NULL;         /* Task has no prev */
       pTask->pWaitNext = NULL;         /* and no next */
-      
-      pFifo->pIn  = pTask;             /* Fifo in and out */      
+
+      pFifo->pIn  = pTask;             /* Fifo in and out */
       pFifo->pOut = pTask;             /* points to the new task */
    }
-   else   
+   else
    {
       /* Fifo is not empty */
-      pTask->pWaitNext = NULL;         /* This is the new last task, therefore no next. */    
+      pTask->pWaitNext = NULL;         /* This is the new last task, therefore no next. */
       pTask->pWaitPrev = pFifo->pOut;  /* Link the new task at the end of the fifo. */
       pFifo->pOut->pWaitNext = pTask;  /* Link the old last to the new last. */
       pFifo->pOut = pTask;             /* Set the fifo-pOut to the new last task. */
    }
-   
+
 } /* AddTaskToWaitList */
 
 /*************************************************************************/
@@ -655,14 +660,14 @@ static __inline__ void AddTaskToWaitList (OS_TCB *pTask)
 static void WaitListRemove (OS_TCB *pTask)
 {
    os_tcb_fifo_t *pFifo = &WaitList;
-   
+
    /* Check if fifo is empty */
    if (NULL == pFifo->pIn)
    {
       /* Error */
       TAL_FAILED();
    }
-   
+
    /* Check if only one element is in the list */
    if (pFifo->pIn == pFifo->pOut)
    {
@@ -693,7 +698,7 @@ static void WaitListRemove (OS_TCB *pTask)
    }
 
    pTask->pWaitPrev = NULL;
-   pTask->pWaitNext = NULL;   
+   pTask->pWaitNext = NULL;
 } /* WaitListRemove */
 
 /*************************************************************************/
@@ -710,7 +715,7 @@ static void WaitListRemove (OS_TCB *pTask)
 static __inline__ void AddTaskToReadyList (OS_TCB *pTask)
 {
    SET_TASK_STATE(pTask, OS_TASK_STATE_READY);
-   TCBFifoAddPrio(&ReadyList, pTask);   
+   TCBFifoAddPrio(&ReadyList, pTask);
 } /* AddTaskToReadyList */
 
 /*************************************************************************/
@@ -735,7 +740,7 @@ static OS_TCB *GetReadyTask (void)
       pTask = &TCBIdle;
    }
    else
-#endif   
+#endif
    {
       pTask = TCBFifoRemove(&ReadyList);
    }
@@ -769,25 +774,25 @@ static void HandleWaitList (void)
       {
          pTask->dTimeoutTicks--;
       }
-   
+
       /* Check if the timeout is expired */
       if (0 == pTask->dTimeoutTicks)
       {
-         /* 
+         /*
           * Save the next pointer of the task.
           * pTask->pNext could not be used later, because it wil be changed
           * by the TCBFifoAdd before we can use the Next for the loop.
           */
          pNext = pTask->pWaitNext;
-         
+
          /* Remove the task from the WaitList */
          WaitListRemove(pTask);
-         
+
          /* Check if the task was waiting for a semaphore */
          if (pTask->pSemaWait)
          {
-            /* 
-             * This is a timeout of the semaphore, 
+            /*
+             * This is a timeout of the semaphore,
              * the task must be removed from the semaphore list too.
              */
             TCBFifoRemoveMiddle(&pTask->pSemaWait->Fifo, pTask);
@@ -798,8 +803,8 @@ static void HandleWaitList (void)
          /* Check if the task was waiting for a mutex */
          if (pTask->pMutexWait)
          {
-            /* 
-             * This is a timeout of the mutex, 
+            /*
+             * This is a timeout of the mutex,
              * the task must be removed from the mutex list too.
              */
             TCBFifoRemoveMiddle(&pTask->pMutexWait->Fifo, pTask);
@@ -810,18 +815,18 @@ static void HandleWaitList (void)
          /* Check if the task was waiting for an event */
          if (pTask->pEventWait)
          {
-            /* 
-             * This is a timeout of the event, 
+            /*
+             * This is a timeout of the event,
              * the task must be removed from the event list too.
              */
             TCBFifoRemoveMiddle(&pTask->pEventWait->Fifo, pTask);
             pTask->pEventWait  = NULL;
             pTask->nReturnCode = OS_RC_TIMEOUT;  /* Return code for OSEventWait */
          }
-         
-         /* Add the task to the ReadyList */            
+
+         /* Add the task to the ReadyList */
          AddTaskToReadyList(pTask);
-         
+
          /* Loop through the list */
          pTask = pNext;
       }
@@ -831,7 +836,7 @@ static void HandleWaitList (void)
          pTask = pTask->pWaitNext;
       }
    } /* end while (pTask != NULL) */
-   
+
 } /* HandleWaitList */
 
 /*************************************************************************/
@@ -853,12 +858,12 @@ static void StatUpdateTime (OS_TCB *pTask)
    uint16_t wEndTimer;
    uint16_t wDeltaTick;
    uint16_t wDeltaTimer;
-   
+
    wStartTimer = pTask->dStatStartTime & 0xFFFF;
    wStartTick  = pTask->dStatStartTime >> 16;
    wEndTimer   = pTask->dStatEndTime & 0xFFFF;
    wEndTick    = pTask->dStatEndTime >> 16;
-   
+
    wDeltaTick = wEndTick - wStartTick;
 
    if (wEndTimer > wStartTimer)
@@ -869,9 +874,9 @@ static void StatUpdateTime (OS_TCB *pTask)
    {
       wDeltaTimer = (uint16_t)(dStatHirResPeriod - wStartTimer) + wEndTimer;
    }
-   
+
    pTask->dStatTotalTime += (wDeltaTick * dStatHirResPeriod) + wDeltaTimer;
-       
+
 } /* StatUpdateTime */
 
 /*************************************************************************/
@@ -886,12 +891,12 @@ static void StatUpdateTime (OS_TCB *pTask)
 /*  Return: none                                                         */
 /*************************************************************************/
 static void TaskSchedule (void)
-{ 
+{
    /*
     * Get new task from the ReadyList.
     */
    NewTask = GetReadyTask();
-   
+
    /*
     * If NewTask == RunningTask, we does not need a task switch
     */
@@ -900,7 +905,7 @@ static void TaskSchedule (void)
 #if (_PERF_OPT_NO_STATISTIC >= 1)
       /* Context switch needed */
       ContextSwitch();
-#else   
+#else
       if (!bStatEnabled)
       {
          /* Context switch needed */
@@ -911,16 +916,16 @@ static void TaskSchedule (void)
          /* Get task end time for statistics */
          RunningTask->dStatEndTime = tal_CPUStatGetHiResCnt();
          StatUpdateTime(RunningTask);
-   
+
          /* Context switch needed */
-         ContextSwitch();    
+         ContextSwitch();
 
          /* Get task start time for statistics */
          RunningTask->dStatStartTime = tal_CPUStatGetHiResCnt();
       }
-#endif /* (_PERF_OPT_NO_STATISTIC >= 1) */      
+#endif /* (_PERF_OPT_NO_STATISTIC >= 1) */
    }
-   
+
 } /* TaskSchedule */
 
 /*************************************************************************/
@@ -935,12 +940,12 @@ static void TaskSchedule (void)
 /*  Return: none                                                         */
 /*************************************************************************/
 static void TaskScheduleExit (void)
-{ 
+{
    /*
     * Get new task from the ReadyList.
     */
    NewTask = GetReadyTask();
-   
+
    /*
     * If NewTask == RunningTask, we does not need a task switch
     */
@@ -949,7 +954,7 @@ static void TaskScheduleExit (void)
 #if (_PERF_OPT_NO_STATISTIC >= 1)
       /* Context switch needed */
       ContextSwitchExit();
-#else   
+#else
       if (!bStatEnabled)
       {
          /* Context switch needed */
@@ -960,17 +965,46 @@ static void TaskScheduleExit (void)
          /* Get task end time for statistics */
          RunningTask->dStatEndTime = tal_CPUStatGetHiResCnt();
          StatUpdateTime(RunningTask);
-   
+
          /* Context switch needed */
-         ContextSwitchExit();    
+         ContextSwitchExit();
 
          /* Get task start time for statistics */
          RunningTask->dStatStartTime = tal_CPUStatGetHiResCnt();
       }
-#endif /* (_PERF_OPT_NO_STATISTIC >= 1) */      
+#endif /* (_PERF_OPT_NO_STATISTIC >= 1) */
    }
-   
+
 } /* TaskScheduleExit */
+
+#if (_USE_SWWD >= 1)
+/*************************************************************************/
+/*  InitHWDog                                                            */
+/*                                                                       */
+/*  In    : none                                                         */
+/*  Out   : none                                                         */
+/*  Return: none                                                         */
+/*************************************************************************/
+static void InitHWDog (void)
+{
+#if (_USE_HWWD >= 1)
+   tal_CPUInitHWDog();
+#endif
+} /* InitHWDog */
+
+/*************************************************************************/
+/*  TriggerHWDog                                                         */
+/*                                                                       */
+/*  In    : none                                                         */
+/*  Out   : none                                                         */
+/*  Return: none                                                         */
+/*************************************************************************/
+static void TriggerHWDog (void)
+{
+#if (_USE_HWWD >= 1)
+   tal_CPUTriggerHWDog();
+#endif
+} /* TriggerHWDog */
 
 /*************************************************************************/
 /*  SWDogTask                                                            */
@@ -980,7 +1014,7 @@ static void TaskScheduleExit (void)
 /*  Return: never                                                        */
 /*************************************************************************/
 static void SWDogTask (void *pParam)
-{   
+{
    OS_TCB   *pTCB;
    uint32_t  dDelayTicks = OS_MS_2_TICKS(TASK_SWDOG_DELAY_TIME_MS);
 
@@ -989,20 +1023,20 @@ static void SWDogTask (void *pParam)
    bSWDogEnabled = 1;
 
    /* Enable the hardware watchdog */
-   CPU_INIT_HW_DOG();
+   InitHWDog();
 
-   /* And feed the dog the first time */         
-   CPU_TRIGGER_DOG();
+   /* And feed the dog the first time */
+   TriggerHWDog();
 
    while (1)
    {
       OS_TimeDly(dDelayTicks);
 
       /* Trigger the HW-Dog here */
-      CPU_TRIGGER_DOG();
+      TriggerHWDog();
 
       /* Get task list start */
-      pTCB = OS_TaskGetList(); 
+      pTCB = OS_TaskGetList();
 
       /* Check timeout of each task */
       while (pTCB != NULL)
@@ -1024,6 +1058,7 @@ static void SWDogTask (void *pParam)
    } /* end hile (1) */
 
 } /* SWDogTask */
+#endif /* (_USE_SWWD >= 1) */
 
 /*************************************************************************/
 /*  StatTask                                                             */
@@ -1033,39 +1068,39 @@ static void SWDogTask (void *pParam)
 /*  Return: never                                                        */
 /*************************************************************************/
 static void StatTask (void *pParam)
-{   
+{
    OS_TCB   *pTask;
    uint32_t  dIdleTime = 0;
    uint32_t  dStatUsage;
-   
+
    (void)pParam;
-   
+
    bStatEnabled      = 1;
    dStatHirResPeriod = tal_CPUStatGetHiResPeriod();
-   
+
    while (1)
    {
       if (bStatEnabled)
       {
          /* Get total task time */
          dStatTotalTaskTime = 0;
-      
-         /* Collect tota task time first */
+
+         /* Collect total task time first */
          pTask = pTaskList;
          while (pTask != NULL)
          {
             /* Count total TaskTime */
             dStatTotalTaskTime += pTask->dStatTotalTime;
-         
+
             /* Find Idle time */
             if (IDLE_TASK_PRIO == pTask->nPrio)
             {
                dIdleTime = pTask->dStatTotalTime;
             }
-      
+
             pTask->dStatTotalLastTime = pTask->dStatTotalTime;
             pTask->dStatTotalTime     = 0;
-         
+
             pTask = pTask->pTaskNext;
          }
 
@@ -1085,24 +1120,31 @@ static void StatTask (void *pParam)
 
             pTask = pTask->pTaskNext;
          }
-                  
+
          /*
           * Calculate CPU load like:
-          * 
+          *
           *   bStatCPULoad = 100 - (uint8_t)((dIdleTime * 100) / dStatTotalTaskTime)
           *
-          * But this makes problems with big counts. Therefore 
+          * But this makes problems with big counts. Therefore
           * dIdleTime will not multiplied instead dStatTotalTaskTime
           * will be divided by 100.
           *
           *   bStatCPULoad = 100 - (uint8_t)(dIdleTime / (dStatTotalTaskTime / 100))
           */
-         bStatCPULoad = 100 - (uint8_t)(dIdleTime / (dStatTotalTaskTime / 100));
-      }         
-      
+         if (dStatTotalTaskTime > 100) /* Prevent division by zero */
+         {
+            bStatCPULoad = 100 - (uint8_t)(dIdleTime / (dStatTotalTaskTime / 100));
+         }
+         else
+         {
+            bStatCPULoad = 1;
+         }
+      }
+
       OS_TimeDly(500);
    }
-   
+
 } /* StatTask */
 
 /*************************************************************************/
@@ -1113,15 +1155,15 @@ static void StatTask (void *pParam)
 /*  Return: never                                                        */
 /*************************************************************************/
 static void IdleTask (void *pParam)
-{   
+{
    (void)pParam;
-   
+
    while (1)
    {
       /* Do not call any other OS function than OSTaskYield here */
       OS_TaskYield();
    }
-   
+
 } /* IdleTask */
 
 /*=======================================================================*/
@@ -1129,7 +1171,7 @@ static void IdleTask (void *pParam)
 /*=======================================================================*/
 
 /*************************************************************************/
-/*  OS_Init                                                              */
+/*  OS_TCTS_Init                                                         */
 /*                                                                       */
 /*  Init the "Cooperative Task Scheduler".                               */
 /*                                                                       */
@@ -1137,26 +1179,26 @@ static void IdleTask (void *pParam)
 /*  Out   : none                                                         */
 /*  Return: none                                                         */
 /*************************************************************************/
-void OS_Init (void)
+void OS_TCTS_Init (void)
 {
    /* Init the Ready and Wait List */
    memset(&ReadyList, 0x00, sizeof(ReadyList));
    memset(&WaitList,  0x00, sizeof(WaitList));
-   
+
    bIsSchedLocked = 1;     /* Used in tcts_cm, _arm and _nios */
 
    /* Create the Idle task */
    OS_TaskCreate(&TCBIdle, IdleTask, NULL, IDLE_TASK_PRIO,
-                 IdleStack, sizeof(IdleStack), "[idle]");
+                 IdleStack, sizeof(IdleStack), "[IdleTask]");
 
-   /* 
+   /*
     * Set dStatTotalTaskTime to 1, to prevent
     * division by 0 in case statistic is not enabled.
     */
-   dStatTotalTaskTime = 1;                
-                
+   dStatTotalTaskTime = 1;
+
    (void)bIsSchedLocked;   /* Prevent lint warning */
-} /* OS_Init */
+} /* OS_TCTS_Init */
 
 /*************************************************************************/
 /*  OS_SysTickStart                                                      */
@@ -1183,7 +1225,7 @@ void OS_SysTickStart (void)
 /*************************************************************************/
 void OS_OutputRuntimeStackInfo (void)
 {
-   OutputRuntimeStackInfo();   
+   OutputRuntimeStackInfo();
 } /* OS_OutputRuntimeStackInfo */
 
 /*************************************************************************/
@@ -1205,7 +1247,7 @@ void OS_OutputTaskInfo (void)
    uint16_t  wTime1 = 0;
    uint16_t  wTime2 = 0;
    uint8_t   bDog;
-   
+
    TAL_PRINTF("*** Task Info ***\n");
    TAL_PRINTF("\n");
    TAL_PRINTF("Task              Prio   Size   Used   Free   Dog   CPU %%\n");
@@ -1215,15 +1257,18 @@ void OS_OutputTaskInfo (void)
    pStart = GetIRQStackStart();
    pEnd   = GetIRQStackEnd();
    dSize  = (uint32_t)pEnd - (uint32_t)pStart;
-   dFree  = GetStackFreeCount(pStart, pEnd);
-   
-   TAL_PRINTF("%-16s  ", "- IRQ -");
-   TAL_PRINTF("  --   %4d   %4d   %4d    -   -----\n", dSize, (dSize - dFree), dFree);
+   if (dSize != 0)
+   {
+      dFree  = GetStackFreeCount(pStart, pEnd);
+
+      TAL_PRINTF("%-16s  ", "- IRQ -");
+      TAL_PRINTF("  --   %4d   %4d   %4d    -   -----\n", dSize, (dSize - dFree), dFree);
+   }
 
 
    /* Get start of list */
-   pTCB = OS_TaskGetList(); 
-   
+   pTCB = OS_TaskGetList();
+
    while (pTCB != NULL)
    {
       /* Do not handle Statistic and Idle here, will be handled at the end */
@@ -1241,20 +1286,20 @@ void OS_OutputTaskInfo (void)
          dFree  = OS_GetStackInfo (pTCB, &dSize);
          wTime1 = (uint16_t)(pTCB->dStatUsage / 100);
          wTime2 = (uint16_t)(pTCB->dStatUsage % 100);
-      
+
 #if (_USE_SWWD >= 1)
-         bDog = (pTCB->lSWDogTimeoutMax != 0) ? 'x' : '-';   
+         bDog = (pTCB->lSWDogTimeoutMax != 0) ? 'x' : '-';
 #else
-         bDog = '-';   
+         bDog = '-';
 #endif
 
          TAL_PRINTF("%4d   %4d   %4d   %4d    %c   %2d.%02d\n", pTCB->nPrio, dSize, (dSize - dFree), dFree, bDog, wTime1, wTime2);
-      }         
-      
+      }
+
       pTCB = pTCB->pTaskNext;
-   }   
-   
-   /* 
+   }
+
+   /*
     * Display Software Watchdog task info
     */
    if (bSWDogEnabled)
@@ -1263,12 +1308,12 @@ void OS_OutputTaskInfo (void)
       dFree  = OS_GetStackInfo (&TCBSWDog, &dSize);
       wTime1 = (uint16_t)(pTCB->dStatUsage / 100);
       wTime2 = (uint16_t)(pTCB->dStatUsage % 100);
-   
+
       TAL_PRINTF("%-16s  ", pTCB->Name);
       TAL_PRINTF("%4d   %4d   %4d   %4d    -   %2d.%02d\n", pTCB->nPrio, dSize, (dSize - dFree), dFree, wTime1, wTime2);
    }
-   
-   /* 
+
+   /*
     * Display Statistic task info
     */
    if (bStatEnabled)
@@ -1277,30 +1322,30 @@ void OS_OutputTaskInfo (void)
       dFree  = OS_GetStackInfo (&TCBStat, &dSize);
       wTime1 = (uint16_t)(pTCB->dStatUsage / 100);
       wTime2 = (uint16_t)(pTCB->dStatUsage % 100);
-      
+
       TAL_PRINTF("%-16s  ", pTCB->Name);
       TAL_PRINTF("%4d   %4d   %4d   %4d    -   %2d.%02d\n", pTCB->nPrio, dSize, (dSize - dFree), dFree, wTime1, wTime2);
-   }      
+   }
 
-   /* 
+   /*
     * Display Idle task info
     */
    pTCB   = &TCBIdle;
    dFree  = OS_GetStackInfo (&TCBIdle, &dSize);
    wTime1 = (uint16_t)(pTCB->dStatUsage / 100);
    wTime2 = (uint16_t)(pTCB->dStatUsage % 100);
-   
+
    TAL_PRINTF("%-16s  ", pTCB->Name);
    TAL_PRINTF("%4d   %4d   %4d   %4d    -   %2d.%02d\n", pTCB->nPrio, dSize, (dSize - dFree), dFree, wTime1, wTime2);
-         
+
    TAL_PRINTF("\n--- CPU load: %d%% ---\n", OS_StatGetCPULoad());
-         
+
    (void)dSize;
    (void)dFree;
    (void)wTime1;
    (void)wTime2;
-         
-   TAL_PRINTF("\n");   
+
+   TAL_PRINTF("\n");
 } /* OS_OutputTaskInfo */
 
 /*************************************************************************/
@@ -1316,15 +1361,15 @@ void OS_OutputSWDogInfo (void)
 {
    OS_TCB   *pTCB;
    uint8_t   bDog;
-   
+
    TAL_PRINTF("*** Software Watchdog Info ***\n");
    TAL_PRINTF("\n");
    TAL_PRINTF("Task              Prio   Dog   Time   Min \n");
    TAL_PRINTF("==========================================\n");
 
    /* Get start of list */
-   pTCB = OS_TaskGetList(); 
-   
+   pTCB = OS_TaskGetList();
+
    while (pTCB != NULL)
    {
       /* Do not handle Statistic and Idle here, will be handled at the end */
@@ -1339,7 +1384,11 @@ void OS_OutputSWDogInfo (void)
             TAL_PRINTF("%-16s  ", "----------------");
          }
 
-         bDog = (pTCB->lSWDogTimeoutMax != 0) ? 1 : 0;   
+#if (_USE_SWWD >= 1)
+         bDog = (pTCB->lSWDogTimeoutMax != 0) ? 1 : 0;
+#else
+         bDog = 0;
+#endif
 
          if (1 == bDog)
          {
@@ -1349,12 +1398,12 @@ void OS_OutputSWDogInfo (void)
          {
             TAL_PRINTF("%4d    -\n", pTCB->nPrio, bDog);
          }
-      }         
-      
-      pTCB = pTCB->pTaskNext;
-   }   
+      }
 
-   /* 
+      pTCB = pTCB->pTaskNext;
+   }
+
+   /*
     * Display Software Watchdog task info
     */
    if (bSWDogEnabled)
@@ -1363,8 +1412,8 @@ void OS_OutputSWDogInfo (void)
       TAL_PRINTF("%-16s  ", pTCB->Name);
       TAL_PRINTF("%4d    -\n", pTCB->nPrio);
    }
-   
-   /* 
+
+   /*
     * Display Statistic task info
     */
    if (bStatEnabled)
@@ -1372,16 +1421,16 @@ void OS_OutputSWDogInfo (void)
       pTCB = &TCBStat;
       TAL_PRINTF("%-16s  ", pTCB->Name);
       TAL_PRINTF("%4d    -\n", pTCB->nPrio);
-   }      
+   }
 
-   /* 
+   /*
     * Display Idle task info
     */
    pTCB = &TCBIdle;
    TAL_PRINTF("%-16s  ", pTCB->Name);
    TAL_PRINTF("%4d    -\n", pTCB->nPrio);
 
-   TAL_PRINTF("\n");   
+   TAL_PRINTF("\n");
 } /* OS_OutputSWDogInfo */
 
 /*************************************************************************/
@@ -1399,12 +1448,12 @@ uint32_t OS_GetStackInfo (OS_TCB *pTCB, uint32_t *pSize)
    uint8_t  *pEnd;
    uint32_t  dSize;
    uint32_t  dFree;
-   
+
    pStart = pTCB->pStackStart;
    pEnd   = (uint8_t*)pStart + pTCB->wStackSize;
    dSize  = (uint32_t)pEnd - (uint32_t)pStart;
    dFree  = GetStackFreeCount(pStart, pEnd);
-   
+
    *pSize = dSize;
 
    return(dFree);
@@ -1427,13 +1476,13 @@ void OS_StatEnable (void)
     */
    uint32_t dDummy = (uint32_t)StatUpdateTime + (uint32_t)StatTask;
    (void)dDummy;
-   (void)StatStack;                
+   (void)StatStack;
    (void)dStatHirResPeriod;
 #else
    /* Create the Statistic task */
    OS_TaskCreate(&TCBStat, StatTask, NULL, STAT_TASK_PRIO,
-                 StatStack, sizeof(StatStack), "[stat]");
-#endif                
+                 StatStack, sizeof(StatStack), "[StatTask]");
+#endif
 } /* OS_StatEnable */
 
 /*************************************************************************/
@@ -1490,9 +1539,9 @@ int OS_TaskGetPriority (void)
 int OS_TaskChangePriority (int nPrio)
 {
    int nOldPrio = RunningTask->nPrio;
-   
+
    RunningTask->nPrio = nPrio;
-   
+
    return(nOldPrio);
 } /* OS_TaskChangePriority */
 
@@ -1508,18 +1557,18 @@ int OS_TaskChangePriority (int nPrio)
 void OS_TaskYield (void)
 {
    EnterCritical();
-   
+
    /*
     * Add the actual running task to the ReadyList.
     */
-   AddTaskToReadyList(RunningTask);    
-   
+   AddTaskToReadyList(RunningTask);
+
    /*
     * Schedule the next task
     */
    TaskSchedule();
-   
-   ExitCritical();             
+
+   ExitCritical();
 } /* OS_TaskYield */
 
 /*************************************************************************/
@@ -1534,24 +1583,24 @@ void OS_TaskYield (void)
 void OS_TaskExit (void)
 {
    EnterCritical();
-   
+
    /* Remove task from the task list */
    TaskListRemove(RunningTask);
-   
-   /* 
+
+   /*
     * Set state to "not in use".
     *
     *   -- Do not use the macro SET_TASK_STATE here --
     *
     * The macro can be "empty" in case of performance
     * optimisation and will not work.
-    */   
+    */
    RunningTask->State = OS_TASK_STATE_NOT_IN_USE;
-   
+
    /* Schedule to the next task which is ready */
    TaskScheduleExit();
-   
-   ExitCritical();      
+
+   ExitCritical();
 } /* OS_TaskExit */
 
 /*************************************************************************/
@@ -1571,8 +1620,8 @@ void OS_TaskTerminateRequest (OS_TCB *pTCB)
    {
       pTCB->bFlagTermRequest = 1;
    }
-   
-   ExitCritical();      
+
+   ExitCritical();
 } /* OS_TaskTerminateRequest */
 
 /*************************************************************************/
@@ -1592,8 +1641,8 @@ void OS_TaskWakeup (OS_TCB *pTCB)
    {
       pTCB->dTimeoutTicks = 0;
    }
-   
-   ExitCritical();      
+
+   ExitCritical();
 } /* OS_TaskWakeup */
 
 /*************************************************************************/
@@ -1615,8 +1664,8 @@ uint8_t OS_TaskIsSleeping (OS_TCB *pTCB)
    {
       bSleeping = (pTCB->dTimeoutTicks != 0) ? 1 : 0;
    }
-   
-   ExitCritical();      
+
+   ExitCritical();
 
    return(bSleeping);
 } /* OS_TaskIsSleeping */
@@ -1650,6 +1699,38 @@ OS_TCB *OS_TaskGetList (void)
 } /* OS_TaskGetList */
 
 /*************************************************************************/
+/*  OS_TaskTestStateNotInUsed                                            */
+/*                                                                       */
+/*  Check if task is in used.                                            */
+/*                                                                       */
+/*  In    : pTCB                                                         */
+/*  Out   : none                                                         */
+/*  Return: 0 / 1                                                        */
+/*************************************************************************/
+int OS_TaskTestStateNotInUsed (OS_TCB *pTCB)
+{
+   return( (OS_TASK_STATE_NOT_IN_USE == pTCB->State) );
+} /* OS_TaskTestStateNotInUsed */
+
+/*************************************************************************/
+/*  OS_TaskSetStateNotInUsed                                             */
+/*                                                                       */
+/*  Change the task state to "not in used".                              */
+/*                                                                       */
+/*  In    : pTCB                                                         */
+/*  Out   : none                                                         */
+/*  Return: none                                                         */
+/*************************************************************************/
+void OS_TaskSetStateNotInUsed (OS_TCB *pTCB)
+{
+   if (pTCB != NULL)
+   {
+      pTCB->State = OS_TASK_STATE_NOT_IN_USE;
+   }
+
+} /* OS_TaskSetNotInUsed */
+
+/*************************************************************************/
 /*  OS_TimerCallback                                                     */
 /*                                                                       */
 /*  This function will be called from the Systick interrupt.             */
@@ -1662,13 +1743,13 @@ OS_TCB *OS_TaskGetList (void)
 /*************************************************************************/
 void OS_TimerCallback (void)
 {
-   
-   /* 
-    * System ticker 
+
+   /*
+    * System ticker
     */
    dSystemTick++;
 
-   /* 
+   /*
     * Second ticker
     */
    dMilliSecCnt++;
@@ -1679,12 +1760,12 @@ void OS_TimerCallback (void)
       dUnixtime++;
    }
 
-   /* 
-    * Go through the WaitList and decrease the WaitCount. 
+   /*
+    * Go through the WaitList and decrease the WaitCount.
     */
    HandleWaitList();
-   
-   
+
+
    /*
     * Check user timer
     */
@@ -1699,8 +1780,8 @@ void OS_TimerCallback (void)
          UserTimer();
          UserTimer = NULL;
       }
-   }       
-   
+   }
+
 } /* OS_TimerCallback */
 
 /*************************************************************************/
@@ -1715,16 +1796,16 @@ void OS_TimerCallback (void)
 void OS_TimerSet (OS_TIMER_FUNC Timer, uint32_t dTimeoutMs)
 {
    uint32_t dTicks;
-   
+
    dTicks = OS_MS_2_TICKS(dTimeoutMs);
 
    EnterCritical();
-   
+
    UserTimer        = Timer;
    UserTimerTimeout = dTicks;
 
    ExitCritical();
-   
+
 } /* OS_TimerSet */
 
 /*************************************************************************/
@@ -1770,9 +1851,9 @@ uint32_t OS_TimeGetSeconds (void)
 void OS_TimeDly (uint32_t dTimeoutMs)
 {
    uint32_t dTicks;
-   
+
    dTicks = OS_MS_2_TICKS(dTimeoutMs);
-   
+
    if (0 == dTicks)
    {
       OS_TaskYield();
@@ -1785,7 +1866,7 @@ void OS_TimeDly (uint32_t dTimeoutMs)
       TaskSchedule();                  /* Schedule the next task */
       ExitCritical();
    }
-   
+
 } /* OS_TimeDly */
 
 /*************************************************************************/
@@ -1803,11 +1884,11 @@ void OS_TimeDlyUntil (uint32_t dNextTime)
 {
    uint32_t dWaitTime;
    uint32_t dActualTime = OS_TimeGet();
-   
+
    /* Calculate delta, only if dNextTime is greater than dActualTime */
    if (dNextTime > dActualTime)
    {
-      dWaitTime = dNextTime - dActualTime; 
+      dWaitTime = dNextTime - dActualTime;
 
       EnterCritical();
       RunningTask->dTimeoutTicks = dWaitTime;
@@ -1818,8 +1899,8 @@ void OS_TimeDlyUntil (uint32_t dNextTime)
    else
    {
       OS_TaskYield();
-   }   
-   
+   }
+
 } /* OS_TimeDlyUntil */
 
 /*************************************************************************/
@@ -1836,16 +1917,16 @@ void OS_TimeWait (uint32_t dTimeoutMs)
 {
    uint32_t dTicks;
    uint32_t dTimeEnd;
-   
+
    dTicks = OS_MS_2_TICKS(dTimeoutMs);
-   
+
    dTimeEnd = dSystemTick + dTicks;
-   
+
    while (dSystemTick <= dTimeEnd)
    {
       __asm__ volatile ("nop");
    }
-      
+
 } /* OS_TimeWait */
 
 /*************************************************************************/
@@ -2025,7 +2106,7 @@ void OS_SWDogStart (void)
 
       /* Start the software watchdog task */
       OS_TaskCreate(&TCBSWDog, SWDogTask, NULL, SWDOG_TASK_PRIO,
-                 SWDogStack, sizeof(SWDogStack), 
+                 SWDogStack, sizeof(SWDogStack),
                  "[swwd]");
    }
 #endif
@@ -2064,10 +2145,10 @@ void OS_SWDogExpand (uint32_t dTimeoutMs)
    uint32_t  dTimeoutTicks = OS_MS_2_TICKS(dTimeoutMs);
 
    /* Get start of list */
-   pTCB = OS_TaskGetList(); 
+   pTCB = OS_TaskGetList();
 
    EnterCritical();
-   
+
    while (pTCB != NULL)
    {
       if (pTCB->lSWDogTimeoutMax != 0)
@@ -2076,9 +2157,9 @@ void OS_SWDogExpand (uint32_t dTimeoutMs)
       }
 
       pTCB = pTCB->pTaskNext;
-   }   
+   }
 
-   ExitCritical();      
+   ExitCritical();
 
 } /* OS_SWDogExpand */
 
@@ -2100,7 +2181,7 @@ void OS_SWDogTaskSetTime (uint32_t dTimeoutMs)
    RunningTask->lSWDogTimeout    = (int32_t)dTimeoutTicks;
    RunningTask->lSWDogTimeoutMax = (int32_t)dTimeoutTicks;
 
-   ExitCritical();      
+   ExitCritical();
 
 } /* OS_SWDogTaskSetTime */
 
@@ -2118,9 +2199,10 @@ void OS_SemaCreate (OS_SEMA *pSema, int32_t nCounterStart, int32_t nCounterMax)
    memset(pSema, 0x00, sizeof(OS_SEMA));
 
    pSema->nCounter    = nCounterStart;
-   pSema->nCounterMax = nCounterMax;   
+   pSema->nCounterMax = nCounterMax;
 } /* OS_SemaCreate */
 
+#if 1 // TODO
 /*************************************************************************/
 /*  OS_SemaReset                                                         */
 /*                                                                       */
@@ -2136,9 +2218,9 @@ void OS_SemaReset (OS_SEMA *pSema, int32_t nCounterStart)
 
    EnterCritical();
 
-   /* Set new counter */   
+   /* Set new counter */
    pSema->nCounter = nCounterStart;
-   
+
    /* Check if fifo is not empty  */
    if (0 == IsFifoEmpty(&pSema->Fifo))
    {
@@ -2148,7 +2230,7 @@ void OS_SemaReset (OS_SEMA *pSema, int32_t nCounterStart)
       {
          /* Remove semaphore info */
          pTask->pSemaWait = NULL;
-      
+
          /* Removed the task from the WaitList too. */
          WaitListRemove(pTask);
          pTask->dTimeoutTicks = 0;
@@ -2159,7 +2241,7 @@ void OS_SemaReset (OS_SEMA *pSema, int32_t nCounterStart)
          /* Make the task which is waiting on the semaphore ready to run */
          AddTaskToReadyList(pTask);
 
-         /* Remove the next task if exist */         
+         /* Remove the next task if exist */
          if (0 == IsFifoEmpty(&pSema->Fifo))
          {
             /* Fifo not empty, remove task from the semaphore fifo */
@@ -2168,17 +2250,18 @@ void OS_SemaReset (OS_SEMA *pSema, int32_t nCounterStart)
          else
          {
             break;
-         }   
-      }         
+         }
+      }
 
-      /* Add the task which reset the semaphore to the ReadyList */ 
-      AddTaskToReadyList(RunningTask);   
+      /* Add the task which reset the semaphore to the ReadyList */
+      AddTaskToReadyList(RunningTask);
 
       TaskSchedule(); /* Schedule the next task */
    }
 
-   ExitCritical();   
+   ExitCritical();
 } /* OS_SemaReset */
+#endif
 
 /*************************************************************************/
 /*  OS_SemaDelete                                                        */
@@ -2204,7 +2287,7 @@ void OS_SemaDelete (OS_SEMA *pSema)
       {
          /* Remove semaphore info */
          pTask->pSemaWait = NULL;
-      
+
          /* Removed task from the WaitList too. */
          WaitListRemove(pTask);
          pTask->dTimeoutTicks = 0;
@@ -2215,7 +2298,7 @@ void OS_SemaDelete (OS_SEMA *pSema)
          /* Make the task which is waiting on the semaphore ready to run */
          AddTaskToReadyList(pTask);
 
-         /* Remove the next task if exist */         
+         /* Remove the next task if exist */
          if (0 == IsFifoEmpty(&pSema->Fifo))
          {
             /* Fifo not empty, remove task from the semaphore fifo */
@@ -2224,11 +2307,11 @@ void OS_SemaDelete (OS_SEMA *pSema)
          else
          {
             break;
-         }   
+         }
       }
    }
-   
-   ExitCritical();   
+
+   ExitCritical();
 } /* OS_SemaDelete */
 
 /*************************************************************************/
@@ -2248,7 +2331,7 @@ static __inline__ int _OSSemaSignalFromInt (OS_SEMA *pSema)
 {
    int      rc = 0;
    OS_TCB *pTask;
-   
+
    /* Check if fifo is not empty  */
    if (0 == IsFifoEmpty(&pSema->Fifo))
    {
@@ -2257,7 +2340,7 @@ static __inline__ int _OSSemaSignalFromInt (OS_SEMA *pSema)
 
       /* Remove semaphore info */
       pTask->pSemaWait = NULL;
-      
+
       /* Removed the task from the WaitList too. */
       WaitListRemove(pTask);
       pTask->dTimeoutTicks = 0;
@@ -2267,7 +2350,7 @@ static __inline__ int _OSSemaSignalFromInt (OS_SEMA *pSema)
 
       /* Make the task which is waiting on the semaphore ready to run */
       AddTaskToReadyList(pTask);
-      
+
       rc = 1;
    }
    else
@@ -2280,9 +2363,9 @@ static __inline__ int _OSSemaSignalFromInt (OS_SEMA *pSema)
       else
       {
          rc = OS_RC_NO_SPACE;
-      }   
+      }
    } /* end if (0 == IsFifoEmpty(&pSema->Fifo)) */
-   
+
    return(rc);
 } /* _OSSemaSignalFromInt */
 
@@ -2318,50 +2401,26 @@ int OS_SemaSignalFromInt (OS_SEMA *pSema)
 int OS_SemaSignal (OS_SEMA *pSema)
 {
    int rc;
-   
+
    EnterCritical();
-   
+
    rc = _OSSemaSignalFromInt(pSema);
 
    /* Check if we must schedule */
    if (1 == rc)
-   {   
-      /* Add the task which signal the semaphore to the ReadyList */ 
-      AddTaskToReadyList(RunningTask);   
+   {
+      /* Add the task which signal the semaphore to the ReadyList */
+      AddTaskToReadyList(RunningTask);
 
       TaskSchedule(); /* Schedule the next task */
-      
-      rc = OS_RC_OK;         
-   }      
-   
+
+      rc = OS_RC_OK;
+   }
+
    ExitCritical();
-   
+
    return(rc);
 } /* OS_SemaSignal */
-
-/*************************************************************************/
-/*  OS_SemaSignalNoSched                                                 */
-/*                                                                       */
-/*  Signal a semaphore but without scheduling.                           */
-/*                                                                       */
-/*  Note: Must not used from inside an interrupt.                        */
-/*                                                                       */
-/*  In    : pSema                                                        */
-/*  Out   : none                                                         */
-/*  Return: OS_RC_OK / error cause                                       */
-/*************************************************************************/
-int OS_SemaSignalNoSched (OS_SEMA *pSema)
-{
-   int rc;
-   
-   EnterCritical();
-   
-   rc = OS_SemaSignalFromInt(pSema);
-   
-   ExitCritical();
-   
-   return(rc);
-} /* OS_SemaSignalNoSched */
 
 /*************************************************************************/
 /*  OS_SemaWait                                                          */
@@ -2385,14 +2444,14 @@ int OS_SemaWait (OS_SEMA *pSema, uint32_t dTimeoutMs)
 {
    int       rc = OS_RC_OK;
    uint32_t dTicks;
-   
+
    EnterCritical();
-   
+
    /* Check if semaphore is available */
    if (pSema->nCounter > 0)
    {
       pSema->nCounter--;
-   }   
+   }
    else
    {
       dTicks = ((dTimeoutMs != OS_WAIT_INFINITE) ? OS_MS_2_TICKS(dTimeoutMs) : OS_WAIT_INFINITE);
@@ -2406,126 +2465,26 @@ int OS_SemaWait (OS_SEMA *pSema, uint32_t dTimeoutMs)
 
          /* Add the task to the fifo of the semaphore */
          TCBFifoAddPrio(&pSema->Fifo, RunningTask);
-      
+
          /*  Add the task to the WaitList too */
-         AddTaskToWaitList(RunningTask);      
+         AddTaskToWaitList(RunningTask);
 
          TaskSchedule(); /* Schedule the next task */
-      
+
          /* This is the return code of the function */
          rc = RunningTask->nReturnCode;
       }
       else
       {
          /* Polling, no resource available */
-         rc = OS_RC_TIMEOUT; 
-      }         
+         rc = OS_RC_TIMEOUT;
+      }
    }
-   
+
    ExitCritical();
-   
+
    return(rc);
 } /* OS_SemaWait */
-
-/*************************************************************************/
-/*  OS_SemaBroadcastAsync                           (needed for NutNET)  */
-/*                                                                       */
-/*  Wake up all tasks waiting on this semaphore. But even if the         */
-/*  priority of any woken task is higher than the current tasks's        */
-/*  priority, the current one continues running.                         */
-/*                                                                       */
-/*  Note: No scheduling here, must not used from inside an interrupt.    */
-/*                                                                       */
-/*  In    : pSema                                                        */
-/*  Out   : none                                                         */
-/*  Return: The number of tasks woken up / error cause                   */
-/*************************************************************************/
-int OS_SemaBroadcastAsync (OS_SEMA *pSema)
-{
-   int      rc = 0;
-   OS_TCB *pTask;
-   
-   EnterCritical();
-
-   /* Check if fifo is not empty  */
-   if (0 == IsFifoEmpty(&pSema->Fifo))
-   {
-      /* Fifo not empty, remove task from the semaphore fifo */
-      pTask = TCBFifoRemove(&pSema->Fifo);
-      while (pTask != NULL) 
-      {
-         /* Remove semaphore info */
-         pTask->pSemaWait = NULL;
-      
-         /* Removed the task from the WaitList */
-         WaitListRemove(pTask);
-         pTask->dTimeoutTicks = 0;
-
-         /* Return code for OSSemaWait */
-         pTask->nReturnCode = OS_RC_OK;
-
-         /* Make the task which is waiting on the semaphore ready to run */
-         AddTaskToReadyList(pTask);
-         
-         rc++;
-
-         /* Get the next task from the fifo */         
-         if (0 == IsFifoEmpty(&pSema->Fifo))
-         {
-            /* Fifo not empty, remove task from the semaphore fifo */
-            pTask = TCBFifoRemove(&pSema->Fifo);
-         }          
-         else
-         {
-            break;
-         }   
-      }          
-   }
-   else
-   {
-      /* Fifo was empty, check for max value */
-      if (pSema->nCounter < pSema->nCounterMax)
-      {
-         pSema->nCounter++;
-      }
-      else
-      {
-         rc = OS_RC_NO_SPACE;
-      }   
-   } /* end if (0 == IsFifoEmpty(&pSema->Fifo)) */
-   
-   ExitCritical();
-   
-   return(rc);
-} /* OS_SemaBroadcastAsync */
-
-/*************************************************************************/
-/*  OS_SemaBroadcast                                (needed for NutNET)  */
-/*                                                                       */
-/*  Wake up all tasks waiting on this semaphore. If the priority of any  */
-/*  waiting tasks is higher or equal than the current task's priority,   */
-/*  then the current task is stopped and CPU control is passed to the    */
-/*  woken up task with the highest priority.                             */
-/*                                                                       */
-/*  Note: Must not used from inside an interrupt.                        */
-/*                                                                       */
-/*  Out   : none                                                         */
-/*  Return: The number of tasks woken up / error cause                   */
-/*************************************************************************/
-int OS_SemaBroadcast (OS_SEMA *pSema)
-{
-   int rc;
-   
-   rc = OS_SemaBroadcastAsync(pSema);
-   
-   /*
-    * If any tasks with higher or equal priority is
-    * ready to run, switch the context.
-    */
-   OS_TaskYield();
-   
-   return(rc);
-} /* OS_SemaBroadcast */  
 
 /*************************************************************************/
 /*  OS_MutexCreate                                                       */
@@ -2558,7 +2517,7 @@ static __inline__ int _OSMutexSignalFromInt (OS_MUTEX *pMutex)
 {
    int      rc = 0;
    OS_TCB *pTask;
-   
+
    /* Check if fifo is not empty  */
    if (0 == IsFifoEmpty(&pMutex->Fifo))
    {
@@ -2566,17 +2525,17 @@ static __inline__ int _OSMutexSignalFromInt (OS_MUTEX *pMutex)
       {
          pMutex->nCounter--;
       }
-      
+
       if (0 == pMutex->nCounter)
-      {  
+      {
          pMutex->Owner = NULL;
-          
+
          /* Fifo not empty, remove task from the mutex fifo */
          pTask = TCBFifoRemove(&pMutex->Fifo);
 
          /* Remove semaphore info */
          pTask->pMutexWait = NULL;
-      
+
          /* Removed the task from the WaitList too. */
          WaitListRemove(pTask);
          pTask->dTimeoutTicks = 0;
@@ -2586,8 +2545,8 @@ static __inline__ int _OSMutexSignalFromInt (OS_MUTEX *pMutex)
 
          /* Make the task which is waiting on the semaphore ready to run */
          AddTaskToReadyList(pTask);
-      }         
-      
+      }
+
       rc = 1;
    }
    else
@@ -2604,12 +2563,13 @@ static __inline__ int _OSMutexSignalFromInt (OS_MUTEX *pMutex)
       else
       {
          rc = OS_RC_ERROR;
-      }   
+      }
    } /* end if (0 == IsFifoEmpty(&pSema->Fifo)) */
-   
+
    return(rc);
 } /* _OSMutexSignalFromInt */
 
+#if 0
 /*************************************************************************/
 /*  OS_MutexSignalFromInt                                                */
 /*                                                                       */
@@ -2621,12 +2581,14 @@ static __inline__ int _OSMutexSignalFromInt (OS_MUTEX *pMutex)
 /*                                                                       */
 /*  In    : pMutex                                                       */
 /*  Out   : none                                                         */
-/*  Return: 1 = must schedule / 0 = schedule not needed / error cause    */
+/*  Return: none                                                         */
 /*************************************************************************/
-int OS_MutexSignalFromInt (OS_MUTEX *pMutex)
+void OS_MutexSignalFromInt (OS_MUTEX *pMutex)
 {
-   return(_OSMutexSignalFromInt(pMutex));
+   _OSMutexSignalFromInt(pMutex);
+
 } /* OS_MutexSignalFromInt */
+#endif
 
 /*************************************************************************/
 /*  OS_MutexSignal                                                       */
@@ -2637,30 +2599,29 @@ int OS_MutexSignalFromInt (OS_MUTEX *pMutex)
 /*                                                                       */
 /*  In    : pSema                                                        */
 /*  Out   : none                                                         */
-/*  Return: OS_RC_OK / error cause                                       */
+/*  Return: none                                                         */
 /*************************************************************************/
-int OS_MutexSignal (OS_MUTEX *pMutex)
+void OS_MutexSignal (OS_MUTEX *pMutex)
 {
    int rc;
-   
+
    EnterCritical();
-   
+
    rc = _OSMutexSignalFromInt(pMutex);
 
    /* Check if we must schedule */
    if (1 == rc)
-   {   
-      /* Add the task which signal the mutex to the ReadyList */ 
-      AddTaskToReadyList(RunningTask);   
+   {
+      /* Add the task which signal the mutex to the ReadyList */
+      AddTaskToReadyList(RunningTask);
 
       TaskSchedule(); /* Schedule the next task */
-      
-      rc = OS_RC_OK;         
-   }      
-   
+
+      rc = OS_RC_OK;
+   }
+
    ExitCritical();
-   
-   return(rc);
+
 } /* OS_MutexSignal */
 
 /*************************************************************************/
@@ -2685,15 +2646,15 @@ int OS_MutexWait (OS_MUTEX *pMutex, uint32_t dTimeoutMs)
 {
    int       rc = OS_RC_OK;
    uint32_t dTicks;
-   
+
    EnterCritical();
-   
+
    /* Check if mutex is available */
    if (NULL == pMutex->Owner)
    {
-      pMutex->Owner = RunningTask; 
+      pMutex->Owner = RunningTask;
       pMutex->nCounter++;
-   }   
+   }
    else if (pMutex->Owner == RunningTask)
    {
       pMutex->nCounter++;
@@ -2711,24 +2672,24 @@ int OS_MutexWait (OS_MUTEX *pMutex, uint32_t dTimeoutMs)
 
          /* Add the task to the fifo of the mutex */
          TCBFifoAddPrio(&pMutex->Fifo, RunningTask);
-      
+
          /*  Add the task to the WaitList too */
-         AddTaskToWaitList(RunningTask);      
+         AddTaskToWaitList(RunningTask);
 
          TaskSchedule(); /* Schedule the next task */
-      
+
          /* This is the return code of the function */
          rc = RunningTask->nReturnCode;
       }
       else
       {
          /* Polling, no resource available */
-         rc = OS_RC_TIMEOUT; 
-      }         
+         rc = OS_RC_TIMEOUT;
+      }
    }
-   
+
    ExitCritical();
-   
+
    return(rc);
 } /* OS_MutexWait */
 
@@ -2773,7 +2734,7 @@ void OS_EventDelete (OS_EVENT *pEvent)
          /* Remove event info */
          pTask->pEventWait = NULL;
          pTask->dEventWaitPattern = 0;
-      
+
          /* Removed the task from the WaitList too. */
          WaitListRemove(pTask);
          pTask->dTimeoutTicks = 0;
@@ -2784,7 +2745,7 @@ void OS_EventDelete (OS_EVENT *pEvent)
          /* Make the task which is waiting on the event ready to run */
          AddTaskToReadyList(pTask);
 
-         /* Remove the next task if exist */         
+         /* Remove the next task if exist */
          if (0 == IsFifoEmpty(&pEvent->Fifo))
          {
             /* Fifo not empty, remove task from the event fifo */
@@ -2793,10 +2754,10 @@ void OS_EventDelete (OS_EVENT *pEvent)
          else
          {
             break;
-         }   
+         }
       }
    }
-   
+
    ExitCritical();
 } /* OS_EventDelete */
 
@@ -2821,7 +2782,7 @@ void OS_EventSetFromInt (OS_EVENT *pEvent, uint32_t dPattern)
    OS_TCB *pPrev;
 
    pEvent->dPattern |= dPattern;
-   
+
    /* Check if fifo is NOT empty  */
    if (0 == IsFifoEmpty(&pEvent->Fifo))
    {
@@ -2830,47 +2791,47 @@ void OS_EventSetFromInt (OS_EVENT *pEvent, uint32_t dPattern)
 
       while (pTask != NULL)
       {
-         /* 
+         /*
           * Save the prev pointer of the task.
           * pTask->pPrev could not be used later, because it wil be changed
           * by the TCBFifoRemoveMiddle before we can use the Prev for the loop.
           */
          pPrev = pTask->pPrev;
-      
+
          /*
           * Check if the task must wait or not
           */
          if (OS_EVENT_MODE_OR == pTask->EventWaitMode)
          {
-            GoReady = ((pEvent->dPattern & pTask->dEventWaitPattern) != 0) ? 1 : 0;   
+            GoReady = ((pEvent->dPattern & pTask->dEventWaitPattern) != 0) ? 1 : 0;
          }
          else
          {
-            GoReady = ((pEvent->dPattern & pTask->dEventWaitPattern) == pTask->dEventWaitPattern) ? 1 : 0; 
+            GoReady = ((pEvent->dPattern & pTask->dEventWaitPattern) == pTask->dEventWaitPattern) ? 1 : 0;
          }
-   
+
          if (GoReady)
          {
             pTask->dEventWaitPattern = pEvent->dPattern;
             pTask->nReturnCode       = OS_RC_OK;
-         
+
             TCBFifoRemoveMiddle(&pEvent->Fifo, pTask);
-         
+
             /* Remove event info */
             pTask->pEventWait = NULL;
-                  
+
             /* Removed the task from the WaitList too. */
             WaitListRemove(pTask);
             pTask->dTimeoutTicks = 0;
-         
+
             AddTaskToReadyList(pTask);
-         
+
             rc++;
          }
-   
+
          pTask = pPrev;
       }
-      
+
       if (rc != 0)
       {
          /* Event occurred, the pattern can be cleared */
@@ -2894,21 +2855,21 @@ void OS_EventSetFromInt (OS_EVENT *pEvent, uint32_t dPattern)
 void OS_EventSet (OS_EVENT *pEvent, uint32_t dPattern)
 {
    EnterCritical();
-   
+
    OS_EventSetFromInt(pEvent, dPattern);
-   
-   /* Add the task which signal the event to the ReadyList */ 
-   AddTaskToReadyList(RunningTask);   
+
+   /* Add the task which signal the event to the ReadyList */
+   AddTaskToReadyList(RunningTask);
 
    TaskSchedule(); /* Schedule the next task */
-   
+
    ExitCritical();
 } /* OS_EventSet */
 
 /*************************************************************************/
-/*  OS_EventSetNoSched                                                   */
+/*  OS_EventClr                                                          */
 /*                                                                       */
-/*  Signal an event but without scheduling.                              */
+/*  Clear the event pattern.                                             */
 /*                                                                       */
 /*  Note: Must not used from inside an interrupt.                        */
 /*                                                                       */
@@ -2916,14 +2877,11 @@ void OS_EventSet (OS_EVENT *pEvent, uint32_t dPattern)
 /*  Out   : none                                                         */
 /*  Return: none                                                         */
 /*************************************************************************/
-void OS_EventSetNoSched (OS_EVENT *pEvent, uint32_t dPattern)
+void OS_EventClr (OS_EVENT *pEvent, uint32_t dPattern)
 {
-   EnterCritical();
-   
-   OS_EventSetFromInt(pEvent, dPattern);
-      
-   ExitCritical();
-} /* OS_EventSetNoSched */
+   pEvent->dPattern &= ~dPattern;
+
+} /* OS_EventClr */
 
 /*************************************************************************/
 /*  OS_EventWait                                                         */
@@ -2939,36 +2897,36 @@ void OS_EventSetNoSched (OS_EVENT *pEvent, uint32_t dPattern)
 /*  Out   : none                                                         */
 /*  Return: OS_EVENT_RC_OK / error casue                                 */
 /*************************************************************************/
-int OS_EventWait (OS_EVENT *pEvent, uint32_t dWaitPattern, 
+int OS_EventWait (OS_EVENT *pEvent, uint32_t dWaitPattern,
                  os_event_mode_t Mode, uint32_t *pPattern, uint32_t dTimeoutMs)
 {
    int       rc      = OS_RC_ERROR;
    int       GoReady = 0;
-   uint32_t dTicks;   
-   
+   uint32_t dTicks;
+
    dTicks = ((dTimeoutMs != OS_WAIT_INFINITE) ? OS_MS_2_TICKS(dTimeoutMs) : OS_WAIT_INFINITE);
-   
+
    EnterCritical();
-   
+
    *pPattern = 0;
-   
+
    /*
     * Check if the task must wait or not
     */
    if (OS_EVENT_MODE_OR == Mode)
    {
-      GoReady = ((pEvent->dPattern & dWaitPattern) != 0) ? 1 : 0;   
+      GoReady = ((pEvent->dPattern & dWaitPattern) != 0) ? 1 : 0;
    }
    else
    {
-      GoReady = ((pEvent->dPattern & dWaitPattern) == dWaitPattern) ? 1 : 0; 
+      GoReady = ((pEvent->dPattern & dWaitPattern) == dWaitPattern) ? 1 : 0;
    }
-   
+
    if (GoReady)
    {
       *pPattern = pEvent->dPattern;
       pEvent->dPattern = 0;
-      
+
       rc = OS_RC_OK;
    }
    else
@@ -2982,12 +2940,12 @@ int OS_EventWait (OS_EVENT *pEvent, uint32_t dWaitPattern,
          RunningTask->EventWaitMode     = Mode;
          RunningTask->nReturnCode       = OS_RC_ERROR;
          SET_TASK_STATE(RunningTask, OS_TASK_STATE_WAITING);
-      
+
          /* Add the task to the fifo of the event */
          TCBFifoAddPrio(&pEvent->Fifo, RunningTask);
-      
+
          /*  Add the task to the WaitList too */
-         AddTaskToWaitList(RunningTask);      
+         AddTaskToWaitList(RunningTask);
 
          TaskSchedule(); /* Schedule the next task */
 
@@ -3001,12 +2959,12 @@ int OS_EventWait (OS_EVENT *pEvent, uint32_t dWaitPattern,
       else
       {
          /* Polling, no event available */
-         rc = OS_RC_TIMEOUT; 
-      }         
+         rc = OS_RC_TIMEOUT;
+      }
    }
-      
+
    ExitCritical();
-   
+
    return(rc);
 } /* OS_EventWait */
 
@@ -3023,8 +2981,8 @@ void OS_MboxCreate (OS_MBOX *pMbox, void **pBuffer, uint16_t wCounterMax)
 {
    memset(pMbox, 0x00, sizeof(OS_MBOX));
 
-   OS_SemaCreate(&pMbox->UsedCntSema, 0,           wCounterMax); 
-   OS_SemaCreate(&pMbox->FreeCntSema, wCounterMax, wCounterMax); 
+   OS_SemaCreate(&pMbox->UsedCntSema, 0,           wCounterMax);
+   OS_SemaCreate(&pMbox->FreeCntSema, wCounterMax, wCounterMax);
 
    pMbox->wCountMax = wCounterMax;
    pMbox->wCount    = 0;
@@ -3074,28 +3032,28 @@ static __inline__  int _OSMboxPostFromInt (OS_MBOX *pMbox, void *pMsg)
        * Therefore decrement the semaphore counter direct.
        */
       pMbox->FreeCntSema.nCounter--;
-   
+
       /* Increment counter, one more message available */
       pMbox->wCount++;
-      
+
       /* Store message */
       pMbox->pBuffer[pMbox->wInIndex] = pMsg;
-      
+
       /* Switch to next place */
       pMbox->wInIndex++;
-      
+
       /* Check end of ring buffer */
       if (pMbox->wCountMax == pMbox->wInIndex)
       {
          pMbox->wInIndex = 0;
       }
-   
+
       /* Signal message available */
       OS_SemaSignalFromInt(&pMbox->UsedCntSema);
-      
+
       rc = OS_RC_OK;
    }
-   
+
    return(rc);
 } /* _OSMboxPostFromInt */
 
@@ -3131,13 +3089,13 @@ int OS_MboxPostFromInt (OS_MBOX *pMbox, void *pMsg)
 int OS_MboxPost (OS_MBOX *pMbox, void *pMsg)
 {
    int rc;
-   
+
    EnterCritical();
-   
+
    rc = _OSMboxPostFromInt(pMbox, pMsg);
-   
+
    ExitCritical();
-   
+
    return(rc);
 } /* OS_MboxPost */
 
@@ -3162,7 +3120,7 @@ int OS_MboxPost (OS_MBOX *pMbox, void *pMsg)
 int OS_MboxWait (OS_MBOX *pMbox, void **pMsg, uint32_t dTimeoutMs)
 {
    int rc;
-   
+
    if (0 == dTimeoutMs)
    {
       if (0 == pMbox->wCount)
@@ -3170,7 +3128,7 @@ int OS_MboxWait (OS_MBOX *pMbox, void **pMsg, uint32_t dTimeoutMs)
          return(OS_RC_TIMEOUT);
       }
    }
-   
+
    rc = OS_SemaWait(&pMbox->UsedCntSema, dTimeoutMs);
    if (OS_RC_OK == rc)
    {
@@ -3179,7 +3137,7 @@ int OS_MboxWait (OS_MBOX *pMbox, void **pMsg, uint32_t dTimeoutMs)
       /* Decrement counter, one message will be removed */
       pMbox->wCount--;
 
-      /* Get message */      
+      /* Get message */
       *pMsg = pMbox->pBuffer[pMbox->wOutIndex];
 
       /* Switch to next place */
@@ -3192,11 +3150,13 @@ int OS_MboxWait (OS_MBOX *pMbox, void **pMsg, uint32_t dTimeoutMs)
       }
 
       OS_SemaSignalFromInt(&pMbox->FreeCntSema);
-      
+
       ExitCritical();
-   }      
-   
+   }
+
    return(rc);
 } /* OS_MboxWait*/
+
+#endif /* defined(RTOS_TCTS) */
 
 /*** EOF ***/

@@ -135,7 +135,7 @@
  *       regardless of the setting of MBEDTLS_HAVE_TIME, unless
  *       MBEDTLS_TIMING_ALT is used. See timing.c for more information.
  */
-#define MBEDTLS_HAVE_TIME
+//#define MBEDTLS_HAVE_TIME
 
 /**
  * \def MBEDTLS_HAVE_TIME_DATE
@@ -238,6 +238,7 @@ extern void  mbedtls_free(void *ptr);
 //#define MBEDTLS_PLATFORM_FPRINTF_ALT
 //#define MBEDTLS_PLATFORM_PRINTF_ALT
 //#define MBEDTLS_PLATFORM_SNPRINTF_ALT
+//#define MBEDTLS_PLATFORM_VSNPRINTF_ALT
 //#define MBEDTLS_PLATFORM_NV_SEED_ALT
 //#define MBEDTLS_PLATFORM_SETUP_TEARDOWN_ALT
 
@@ -803,17 +804,18 @@ extern void  mbedtls_free(void *ptr);
  * Comment macros to disable the curve and functions for it
  */
 /* Short Weierstrass curves (supporting ECP, ECDH, ECDSA) */
-//#define MBEDTLS_ECP_DP_SECP192R1_ENABLED
-//#define MBEDTLS_ECP_DP_SECP224R1_ENABLED
+#define MBEDTLS_ECP_DP_SECP192R1_ENABLED     // NIST P-192
+#define MBEDTLS_ECP_DP_SECP224R1_ENABLED     // NIST P-224
 #define MBEDTLS_ECP_DP_SECP256R1_ENABLED     // NIST P-256
-//#define MBEDTLS_ECP_DP_SECP384R1_ENABLED     // NIST P-384
-//#define MBEDTLS_ECP_DP_SECP521R1_ENABLED
+#define MBEDTLS_ECP_DP_SECP384R1_ENABLED     // NIST P-384
+#define MBEDTLS_ECP_DP_SECP521R1_ENABLED     // NIST P-521
 //#define MBEDTLS_ECP_DP_SECP192K1_ENABLED
 //#define MBEDTLS_ECP_DP_SECP224K1_ENABLED
 //#define MBEDTLS_ECP_DP_SECP256K1_ENABLED
 //#define MBEDTLS_ECP_DP_BP256R1_ENABLED
 //#define MBEDTLS_ECP_DP_BP384R1_ENABLED
 //#define MBEDTLS_ECP_DP_BP512R1_ENABLED
+/* Montgomery curves (supporting ECP) */
 //#define MBEDTLS_ECP_DP_CURVE25519_ENABLED
 //#define MBEDTLS_ECP_DP_CURVE448_ENABLED
 
@@ -3119,7 +3121,7 @@ extern void  mbedtls_free(void *ptr);
 /**
  * \def MBEDTLS_PK_C
  *
- * Enable the generic public (asymetric) key layer.
+ * Enable the generic public (asymmetric) key layer.
  *
  * Module:  library/pk.c
  * Caller:  library/ssl_tls.c
@@ -3135,7 +3137,7 @@ extern void  mbedtls_free(void *ptr);
 /**
  * \def MBEDTLS_PK_PARSE_C
  *
- * Enable the generic public (asymetric) key parser.
+ * Enable the generic public (asymmetric) key parser.
  *
  * Module:  library/pkparse.c
  * Caller:  library/x509_crt.c
@@ -3150,7 +3152,7 @@ extern void  mbedtls_free(void *ptr);
 /**
  * \def MBEDTLS_PK_WRITE_C
  *
- * Enable the generic public (asymetric) key writer.
+ * Enable the generic public (asymmetric) key writer.
  *
  * Module:  library/pkwrite.c
  * Caller:  library/x509write.c
