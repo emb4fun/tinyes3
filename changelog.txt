@@ -2,12 +2,18 @@
 * Project: tinyes3
 * Name   : "An Embedded Secure Signing Server."
 * Target : BeagleBone Black
-* Version: 20230926
+* Version: 20231212
 ***************************************************************************
-* Tools  : SEGGER Embedded Studio for ARM v7.32
+* Tools  : SEGGER Embedded Studio for ARM v7.32a
 ***************************************************************************
 * URL    : https://www.emb4fun.de/projects/tes3/index.html
 ***************************************************************************
+
+= Version 1.10 / 1.01, 12.12.2023
+   * Updated MbedTLS to v3.5.1.
+   * TLS 1.3 support enabled.
+   * Added support for chained certificate.
+   * Used SEGGER Embedded Studio for ARM v7.32a.
 
 = 26.09.2023
    * New lwIP version STABLE-2_2_0_RELEASE used.
