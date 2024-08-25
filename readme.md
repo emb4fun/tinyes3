@@ -1,5 +1,3 @@
-**Note:** There is now the [TinyELCA2S3](https://github.com/emb4fun/tinyelca2s3) application, which combines the functionalities of TinyELCA and TinyES3.
-
 # README for TinyES3
 TinyES3 is an Embedded Secure Signing Server that uses an encryped key storage, EKS.
 The server uses the private elliptic curves keys stored in the EKS to generate the

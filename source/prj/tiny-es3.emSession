@@ -33,8 +33,6 @@
   <ProjectSessionItem path="tiny-es3;tiny-es3"/>
   <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files"/>
   <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files;common"/>
-  <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files;common;library"/>
-  <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files;common;library;tcts"/>
   <ProjectSessionItem path="tiny-es3;tiny-es3;Source Files;src"/>
  </Project>
  <Register1>
@@ -78,7 +76,8 @@
  <Files>
   <SessionOpenFile windowGroup="DockEditLeft" x="0" y="593" useTextEdit="1" path="../src/main.c" left="0" top="578" codecName="Default"/>
   <SessionOpenFile windowGroup="DockEditLeft" x="9" y="46" useTextEdit="1" path="../common/src/cert.c" left="0" top="12" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="19" y="1100" useTextEdit="1" path="../common/library/tcts/src/tcts.c" left="0" selected="1" top="1084" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="19" y="1100" useTextEdit="1" path="../common/library/tcts/src/tcts.c" left="0" top="1084" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="404" useTextEdit="1" path="../common/library/mbedtls/library/pkparse.c" left="0" selected="1" top="385" codecName="Default"/>
  </Files>
- <EMStudioWindow activeProject="tiny-es3" fileDialogDefaultFilter="*.c" autoConnectTarget="J-Link" buildConfiguration="RAM Release" sessionSettings="" debugSearchFileMap="" fileDialogInitialDirectory="D:/Projekte/GitHub/tinyes3/source/prj" debugSearchPath="" autoConnectCapabilities="3199"/>
+ <EMStudioWindow activeProject="tiny-es3" fileDialogDefaultFilter="*.c" autoConnectTarget="J-Link" buildConfiguration="RAM Release" sessionSettings="" debugSearchFileMap="" fileDialogInitialDirectory="D:/Projekte/GitHub/tinyes3/source/common/library/mbedtls/library" debugSearchPath="" autoConnectCapabilities="3199"/>
 </session>
