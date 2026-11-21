@@ -1,5 +1,5 @@
 /**************************************************************************
-*  Copyright (c) 2021-2023 by Michael Fischer (www.emb4fun.de).
+*  Copyright (c) 2021-2026 by Michael Fischer (www.emb4fun.de).
 *  All rights reserved.
 *
 *  Redistribution and use in source and binary forms, with or without 
@@ -52,13 +52,18 @@
 
 #include "mbedtls/platform.h"
 #include "mbedtls/base64.h"
-#include "mbedtls/md5.h"
-#include "mbedtls/pkcs5.h"
+#include "psa/crypto.h"
 #include "mbedtls/pk.h"
-#include "mbedtls/entropy.h"
-#include "mbedtls/ctr_drbg.h"
-#include "mbedtls/aes.h"
+#include "mbedtls/psa_util.h"
 
+/*
+ * mbedTLS 4.x: mbedtls_ecp_group_id and the MBEDTLS_ECP_DP_* constants are
+ * private now. ES3 uses them only as slot markers (0 = empty slot). The
+ * value 3 matches the 3.6.7 enum value of SECP256R1, so slot data written
+ * by an older firmware stays compatible.
+ */
+#define MBEDTLS_ECP_DP_NONE          0
+#define MBEDTLS_ECP_DP_SECP256R1     3
 /*lint -save -e801*/
 
 /*=======================================================================*/
@@ -275,12 +280,12 @@ static int UserDecode (ES3_USER *pUser, char *pData)
    int                rc = ES3_ERR_USER;
    mbedtls_pk_context ctx;
    size_t             len;
+   size_t             HashLen;
    static char        Temp[256];  
    char             *pPtr;
    char             *pStart;
    char             *pEnd;
    uint8_t          *buf = NULL;
-   uint8_t          *p;
 
    mbedtls_pk_init(&ctx);
 
@@ -353,13 +358,13 @@ static int UserDecode (ES3_USER *pUser, char *pData)
       memcpy(pUser->PubKeyRaw, buf, len);
    }
     
-   /* Create MD5 hash of decoded data */    
-   rc = mbedtls_md5(buf, len, pUser->Hash);
-   if (rc != 0) GOTO_END(ES3_ERR_USER);
+   /* Create MD5 hash of decoded data */
+   rc = psa_hash_compute(PSA_ALG_MD5, buf, len,
+                         pUser->Hash, sizeof(pUser->Hash), &HashLen);
+   if ((rc != PSA_SUCCESS) || (HashLen != sizeof(pUser->Hash))) GOTO_END(ES3_ERR_USER);
 
    /* Check if this is a valid key */
-   p = buf;
-   rc = mbedtls_pk_parse_subpubkey(&p,  p + len, &ctx);
+   rc = mbedtls_pk_parse_public_key(&ctx, buf, len);
    if (rc != 0) GOTO_END(ES3_ERR_USER);
    
    /* 
@@ -412,7 +417,154 @@ end:
    mbedtls_pk_free(&ctx);
 
    return(rc);
-} /* UserDecode */    
+} /* UserDecode */
+
+/*************************************************************************/
+/*  AesCbcCrypt                                                          */
+/*                                                                       */
+/*  AES-256-CBC encrypt or decrypt without padding, by the PSA crypto  */
+/*  API. The IV is explicit, therefore the multipart operation must be  */
+/*  used, a one shot operation would generate the IV by itself.         */
+/*                                                                       */
+/*  In    : pKey, Encrypt, pIV, pIn, Size                                */
+/*  Out   : pOut                                                        */
+/*  Return: 0 = OK / -1 = ERROR                                          */
+/*************************************************************************/
+static int AesCbcCrypt (const uint8_t *pKey, int Encrypt, const uint8_t *pIV,
+                        const uint8_t *pIn, uint8_t *pOut, size_t Size)
+{
+   int                    rc = -1;
+   psa_status_t           status;
+   psa_key_attributes_t   attributes = PSA_KEY_ATTRIBUTES_INIT;
+   psa_cipher_operation_t operation  = PSA_CIPHER_OPERATION_INIT;
+   psa_key_id_t           key_id     = 0;
+   size_t                 OutLen     = 0;
+   size_t                 FinalLen   = 0;
+
+   /* Import the AES key for the PSA cipher operation */
+   psa_set_key_type(&attributes, PSA_KEY_TYPE_AES);
+   psa_set_key_bits(&attributes, (EKS_KEY_LEN * 8));
+   psa_set_key_usage_flags(&attributes, (Encrypt != 0) ? PSA_KEY_USAGE_ENCRYPT
+                                                       : PSA_KEY_USAGE_DECRYPT);
+   psa_set_key_algorithm(&attributes, PSA_ALG_CBC_NO_PADDING);
+
+   status = psa_import_key(&attributes, pKey, EKS_KEY_LEN, &key_id);
+
+   if (status == PSA_SUCCESS)
+   {
+      if (Encrypt != 0)
+      {
+         status = psa_cipher_encrypt_setup(&operation, key_id,
+                                          PSA_ALG_CBC_NO_PADDING);
+      }
+      else
+      {
+         status = psa_cipher_decrypt_setup(&operation, key_id,
+                                          PSA_ALG_CBC_NO_PADDING);
+      }
+   }
+
+   if (status == PSA_SUCCESS)
+   {
+      status = psa_cipher_set_iv(&operation, pIV, AES_IV_BYTES_CNT);
+   }
+
+   if (status == PSA_SUCCESS)
+   {
+      status = psa_cipher_update(&operation, pIn, Size, pOut,
+                                 PSA_CIPHER_UPDATE_OUTPUT_SIZE(PSA_KEY_TYPE_AES,
+                                                               PSA_ALG_CBC_NO_PADDING,
+                                                               Size),
+                                 &OutLen);
+   }
+
+   if (status == PSA_SUCCESS)
+   {
+      status = psa_cipher_finish(&operation, &pOut[OutLen],
+                                (Size - OutLen), &FinalLen);
+   }
+
+   /* The operation will be finished or in error state, abort is always safe */
+   psa_cipher_abort(&operation);
+   psa_destroy_key(key_id);
+
+   if ((status == PSA_SUCCESS) && ((OutLen + FinalLen) == Size))
+   {
+      rc = 0;
+   }
+
+   return(rc);
+} /* AesCbcCrypt */
+
+/*************************************************************************/
+/*  AesEcbCrypt                                                          */
+/*                                                                       */
+/*  AES-256-ECB encrypt or decrypt of one block without padding, by the */
+/*  PSA crypto API.                                                      */
+/*                                                                       */
+/*  In    : pKey, Encrypt, pIn                                           */
+/*  Out   : pOut                                                        */
+/*  Return: 0 = OK / -1 = ERROR                                          */
+/*************************************************************************/
+static int AesEcbCrypt (const uint8_t *pKey, int Encrypt, const uint8_t *pIn, uint8_t *pOut)
+{
+   int                    rc = -1;
+   psa_status_t           status;
+   psa_key_attributes_t   attributes = PSA_KEY_ATTRIBUTES_INIT;
+   psa_cipher_operation_t operation  = PSA_CIPHER_OPERATION_INIT;
+   psa_key_id_t           key_id     = 0;
+   size_t                 OutLen     = 0;
+   size_t                 FinalLen   = 0;
+
+   /* Import the AES key for the PSA cipher operation */
+   psa_set_key_type(&attributes, PSA_KEY_TYPE_AES);
+   psa_set_key_bits(&attributes, (EKS_KEY_LEN * 8));
+   psa_set_key_usage_flags(&attributes, (Encrypt != 0) ? PSA_KEY_USAGE_ENCRYPT
+                                                       : PSA_KEY_USAGE_DECRYPT);
+   psa_set_key_algorithm(&attributes, PSA_ALG_ECB_NO_PADDING);
+
+   status = psa_import_key(&attributes, pKey, EKS_KEY_LEN, &key_id);
+
+   if (status == PSA_SUCCESS)
+   {
+      if (Encrypt != 0)
+      {
+         status = psa_cipher_encrypt_setup(&operation, key_id,
+                                          PSA_ALG_ECB_NO_PADDING);
+      }
+      else
+      {
+         status = psa_cipher_decrypt_setup(&operation, key_id,
+                                          PSA_ALG_ECB_NO_PADDING);
+      }
+   }
+
+   if (status == PSA_SUCCESS)
+   {
+      status = psa_cipher_update(&operation, pIn, AES_DATA_BYTES_CNT, pOut,
+                                 PSA_CIPHER_UPDATE_OUTPUT_SIZE(PSA_KEY_TYPE_AES,
+                                                               PSA_ALG_ECB_NO_PADDING,
+                                                               AES_DATA_BYTES_CNT),
+                                 &OutLen);
+   }
+
+   if (status == PSA_SUCCESS)
+   {
+      status = psa_cipher_finish(&operation, &pOut[OutLen],
+                                (AES_DATA_BYTES_CNT - OutLen), &FinalLen);
+   }
+
+   /* The operation will be finished or in error state, abort is always safe */
+   psa_cipher_abort(&operation);
+   psa_destroy_key(key_id);
+
+   if ((status == PSA_SUCCESS) && ((OutLen + FinalLen) == AES_DATA_BYTES_CNT))
+   {
+      rc = 0;
+   }
+
+   return(rc);
+} /* AesEcbCrypt */
 
 /*************************************************************************/
 /*  UserEncrypt                                                          */
@@ -424,24 +576,16 @@ end:
 static int UserEncrypt (ES3_USER *pUser)
 {
    int                        rc;
-   static mbedtls_aes_context ctx;
-   static uint8_t             Random[USER_RANDOM_SIZE];
-   
-   memcpy(Random, pUser->Random, USER_RANDOM_SIZE);
+   static uint8_t             out[sizeof(ES3_USER) - USER_RANDOM_SIZE];
 
    /* Encrypt data */
-   mbedtls_aes_init(&ctx);
-   mbedtls_aes_setkey_enc(&ctx, EKSKey, (EKS_KEY_LEN*8));
-   rc = mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_ENCRYPT, 
-                              sizeof(ES3_USER) - USER_RANDOM_SIZE, 
-                              pUser->Random, 
-                              (uint8_t*)&pUser->dMagic1,
-                              (uint8_t*)&pUser->dMagic1);
-   mbedtls_aes_free(&ctx);
+   rc = AesCbcCrypt(EKSKey, 1, pUser->Random,
+                    (uint8_t*)&pUser->dMagic1, out,
+                    sizeof(ES3_USER) - USER_RANDOM_SIZE);
 
    /* Check for AES error */
    if (rc != 0) GOTO_END(ES3_ERR_USER_ENCRYPT);
-   memcpy(pUser->Random, Random, USER_RANDOM_SIZE);
+   memcpy((uint8_t*)&pUser->dMagic1, out, sizeof(ES3_USER) - USER_RANDOM_SIZE);
    
    rc = ES3_OK;
 
@@ -459,24 +603,16 @@ end:
 static int UserDecrypt (ES3_USER *pUser)
 {
    int                        rc;
-   static mbedtls_aes_context ctx;
-   static uint8_t             Random[USER_RANDOM_SIZE];
-   
-   memcpy(Random, pUser->Random, USER_RANDOM_SIZE);
+   static uint8_t             out[sizeof(ES3_USER) - USER_RANDOM_SIZE];
 
    /* Decrypt data */
-   mbedtls_aes_init(&ctx);
-   mbedtls_aes_setkey_dec(&ctx, EKSKey, (EKS_KEY_LEN*8));
-   rc = mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, 
-                              sizeof(ES3_USER) - USER_RANDOM_SIZE, 
-                              pUser->Random, 
-                              (uint8_t*)&pUser->dMagic1,
-                              (uint8_t*)&pUser->dMagic1);
-   mbedtls_aes_free(&ctx);
+   rc = AesCbcCrypt(EKSKey, 0, pUser->Random,
+                    (uint8_t*)&pUser->dMagic1, out,
+                    sizeof(ES3_USER) - USER_RANDOM_SIZE);
 
    /* Check for AES error */
    if (rc != 0) GOTO_END(ES3_ERR_USER_DECRYPT);
-   memcpy(pUser->Random, Random, USER_RANDOM_SIZE);
+   memcpy((uint8_t*)&pUser->dMagic1, out, sizeof(ES3_USER) - USER_RANDOM_SIZE);
 
    /* Some user checks */
    if ((USER_MAGIC1  == pUser->dMagic1)     && 
@@ -514,7 +650,7 @@ static int UserDel (uint8_t bIndex, ES3_USER *pUser)
    /* Delete user data */
    memset(pUser, 0x00, sizeof(ES3_USER));
    
-   snprintf(UserName, sizeof(UserName), "/eks/user%02d.key", bIndex);
+   snprintf(UserName, sizeof(UserName), "/es3/user%02d.key", bIndex);
    res = f_unlink(UserName);
    if (res != FR_OK) GOTO_END(ES3_ERR_USER_DELETE);
    
@@ -572,7 +708,7 @@ static int UserAdd (uint8_t bIndex, char *pData)
    if (rc != 0) GOTO_END(ES3_ERR_USER_ENCRYPT);
    
    /* Write encrypted user data */
-   snprintf(UserName, sizeof(UserName), "SD0:/eks/user%02d.key", bIndex);
+   snprintf(UserName, sizeof(UserName), "SD0:/es3/user%02d.key", bIndex);
    fd = _open(UserName, _O_BINARY | _O_WRONLY | _O_CREATE_ALWAYS);
    if (-1 == fd) GOTO_END(ES3_ERR_USER_WRITE);
    
@@ -618,7 +754,7 @@ static int UserUnlock (void)
    {
       pUser = &UserArray[bIndex];
       
-      snprintf(UserName, sizeof(UserName), "SD0:/eks/user%02d.key", bIndex);
+      snprintf(UserName, sizeof(UserName), "SD0:/es3/user%02d.key", bIndex);
       fd = _open(UserName, _O_BINARY | _O_RDONLY);
       if (fd != -1)
       {
@@ -654,24 +790,16 @@ static int UserUnlock (void)
 static int SlotEncrypt (ES3_SLOT *pSlot)
 {
    int                        rc;
-   static mbedtls_aes_context ctx;
-   static uint8_t             Random[SLOT_RANDOM_SIZE];
-   
-   memcpy(Random, pSlot->Random, SLOT_RANDOM_SIZE);
+   static uint8_t             out[sizeof(ES3_SLOT) - SLOT_RANDOM_SIZE];
 
    /* Encrypt data */
-   mbedtls_aes_init(&ctx);
-   mbedtls_aes_setkey_enc(&ctx, EKSKey, (EKS_KEY_LEN*8));
-   rc = mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_ENCRYPT, 
-                              sizeof(ES3_SLOT) - SLOT_RANDOM_SIZE, 
-                              pSlot->Random, 
-                              (uint8_t*)&pSlot->dMagic1,
-                              (uint8_t*)&pSlot->dMagic1);
-   mbedtls_aes_free(&ctx);
+   rc = AesCbcCrypt(EKSKey, 1, pSlot->Random,
+                    (uint8_t*)&pSlot->dMagic1, out,
+                    sizeof(ES3_SLOT) - SLOT_RANDOM_SIZE);
 
    /* Check for AES error */
    if (rc != 0) GOTO_END(ES3_ERR_SLOT_ENCRYPT);
-   memcpy(pSlot->Random, Random, SLOT_RANDOM_SIZE);
+   memcpy((uint8_t*)&pSlot->dMagic1, out, sizeof(ES3_SLOT) - SLOT_RANDOM_SIZE);
    
    rc = ES3_OK;
 
@@ -689,24 +817,16 @@ end:
 static int SlotDecrypt (ES3_SLOT *pSlot)
 {
    int                        rc;
-   static mbedtls_aes_context ctx;
-   static uint8_t             Random[SLOT_RANDOM_SIZE];
-   
-   memcpy(Random, pSlot->Random, SLOT_RANDOM_SIZE);
+   static uint8_t             out[sizeof(ES3_SLOT) - SLOT_RANDOM_SIZE];
 
    /* Decrypt data */
-   mbedtls_aes_init(&ctx);
-   mbedtls_aes_setkey_dec(&ctx, EKSKey, (EKS_KEY_LEN*8));
-   rc = mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, 
-                              sizeof(ES3_SLOT) - SLOT_RANDOM_SIZE, 
-                              pSlot->Random, 
-                              (uint8_t*)&pSlot->dMagic1,
-                              (uint8_t*)&pSlot->dMagic1);
-   mbedtls_aes_free(&ctx);
+   rc = AesCbcCrypt(EKSKey, 0, pSlot->Random,
+                    (uint8_t*)&pSlot->dMagic1, out,
+                    sizeof(ES3_SLOT) - SLOT_RANDOM_SIZE);
 
    /* Check for AES error */
    if (rc != 0) GOTO_END(ES3_ERR_SLOT_ENCRYPT);
-   memcpy(pSlot->Random, Random, SLOT_RANDOM_SIZE);
+   memcpy((uint8_t*)&pSlot->dMagic1, out, sizeof(ES3_SLOT) - SLOT_RANDOM_SIZE);
 
    /* Some slot checks */
    if ((SLOT_MAGIC1  == pSlot->dMagic1)     && 
@@ -752,7 +872,7 @@ static int SlotUpdate (uint16_t wSlot)
    if (rc != ES3_OK) GOTO_END(ES3_ERR_SLOT_ENCRYPT);
    
    /* Write encrypted slot data */
-   snprintf(SlotName, sizeof(SlotName), "SD0:/eks/slot%03d.key", wSlot);
+   snprintf(SlotName, sizeof(SlotName), "SD0:/es3/slot%03d.key", wSlot);
    fd = _open(SlotName, _O_BINARY | _O_WRONLY | _O_CREATE_ALWAYS);
    if (-1 == fd) GOTO_END(ES3_ERR_SLOT_WRITE);
    
@@ -787,17 +907,15 @@ static int SlotCreate (uint16_t wSlot, char *pName)
    int                             res;
    int                             fd;
    static mbedtls_pk_context       pk;
-   static mbedtls_entropy_context  entropy;
-   static mbedtls_ctr_drbg_context ctr_drbg;
-   const char                     *pers = "salt";
-   mbedtls_ecp_group_id            grp_id = MBEDTLS_ECP_DP_SECP256R1;
+   psa_status_t                    status;
+   psa_key_attributes_t            attributes = PSA_KEY_ATTRIBUTES_INIT;
+   psa_key_id_t                    key_id = 0;
+   uint16_t                       grp_id = MBEDTLS_ECP_DP_SECP256R1;
    ES3_SLOT                      *pSlot = NULL;
    char                            SlotName[24];
 
    /* Prepare key generation */
    mbedtls_pk_init(&pk);
-   mbedtls_ctr_drbg_init(&ctr_drbg);
-   mbedtls_entropy_init(&entropy);
    
    /* Check valid slot index */
    if (wSlot >= SLOT_MAX_CNT) GOTO_END(ES3_ERR_SLOT); 
@@ -814,17 +932,28 @@ static int SlotCreate (uint16_t wSlot, char *pName)
    snprintf(pSlot->Name, SLOT_NAME_SIZE, "%s", pName);  
    pSlot->Dummy[0]     = 0;   /* Prevent lint warning */
 
-   /* Seed the random generator */
-   res =  mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy,
-                                (const unsigned char *)pers, strlen(pers));
-   if (res != 0) GOTO_END(ES3_ERR_SLOT_DRBG_SEED); 
+   /*
+    * Generate the key with the PSA crypto library, the key stays in
+    * the PSA key store and will be used as an opaque key for the PEM
+    * export. Note: PSA_ALG_ECDSA_ANY is no hash wildcard, therefore
+    * the concrete algorithm is set here.
+    */
+   psa_set_key_type(&attributes, PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1));
+   psa_set_key_bits(&attributes, 256);
+   psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_EXPORT | PSA_KEY_USAGE_SIGN_HASH);
+   psa_set_key_algorithm(&attributes, PSA_ALG_ECDSA(PSA_ALG_SHA_256));
 
-   /* Generate the key */
-   res = mbedtls_pk_setup(&pk, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY));
-   if (res != 0) GOTO_END(ES3_ERR_SLOT_PK_SETUP);
+   status = psa_generate_key(&attributes, &key_id);
+   if (status != PSA_SUCCESS) GOTO_END(ES3_ERR_SLOT_GEN_KEY);
 
-   res = mbedtls_ecp_gen_key(grp_id, mbedtls_pk_ec(pk), mbedtls_ctr_drbg_random, &ctr_drbg);
-   if (res != 0) GOTO_END(ES3_ERR_SLOT_GEN_KEY);
+   /* Setup the pk context with the opaque PSA key */
+   res = mbedtls_pk_wrap_psa(&pk, key_id);
+   if (res != 0)
+   {
+      psa_destroy_key(key_id);
+      key_id = 0;
+      GOTO_END(ES3_ERR_SLOT_PK_SETUP);
+   }
 
    /* "Print" private key */
    res = mbedtls_pk_write_key_pem(&pk, pSlot->Priv, SLOT_BUFFER_SIZE);
@@ -839,7 +968,7 @@ static int SlotCreate (uint16_t wSlot, char *pName)
    if (rc != 0) GOTO_END(ES3_ERR_SLOT_ENCRYPT);
 
    /* Write encrypted slot data */
-   snprintf(SlotName, sizeof(SlotName), "SD0:/eks/slot%03d.key", wSlot);
+   snprintf(SlotName, sizeof(SlotName), "SD0:/es3/slot%03d.key", wSlot);
    fd = _open(SlotName, _O_BINARY | _O_WRONLY | _O_CREATE_ALWAYS);
    if (-1 == fd) GOTO_END(ES3_ERR_SLOT_WRITE);
    
@@ -859,8 +988,7 @@ end:
    }
    
    mbedtls_pk_free(&pk);
-   mbedtls_ctr_drbg_free(&ctr_drbg);
-   mbedtls_entropy_free(&entropy);
+   psa_destroy_key(key_id);
    
    return(rc);
 } /* SlotCreate */
@@ -874,15 +1002,47 @@ end:
 /*************************************************************************/
 static int EKSCreateKey (char *pPass, size_t PassLen)
 {
-   int rc = ES3_ERROR;
-   int ret;
+   int                                rc = ES3_ERROR;
+   psa_status_t                       status;
+   psa_key_derivation_operation_t Derive = PSA_KEY_DERIVATION_OPERATION_INIT;
 
-   ret = mbedtls_pkcs5_pbkdf2_hmac_ext(MBEDTLS_MD_SHA256, 
-                                       (uint8_t*)pPass, PassLen, 
-                                       EKSSalt, sizeof(EKSSalt),
-                                       4096,
-                                       sizeof(EKSKey), EKSKey);
-   if (0 == ret)
+   /*
+    * Create the AES key by PBKDF2-HMAC-SHA256, with 4096 iterations.
+    * Note: The salt includes the string termination, to keep the
+    * result compatible with the previous legacy implementation.
+    */
+   status = psa_key_derivation_setup(&Derive,
+                                     PSA_ALG_PBKDF2_HMAC(PSA_ALG_SHA_256));
+   if (status == PSA_SUCCESS)
+   {
+      status = psa_key_derivation_input_integer(&Derive,
+                                                PSA_KEY_DERIVATION_INPUT_COST,
+                                                4096);
+   }
+
+   if (status == PSA_SUCCESS)
+   {
+      status = psa_key_derivation_input_bytes(&Derive,
+                                               PSA_KEY_DERIVATION_INPUT_SALT,
+                                               EKSSalt, sizeof(EKSSalt));
+   }
+
+   if (status == PSA_SUCCESS)
+   {
+      status = psa_key_derivation_input_bytes(&Derive,
+                                              PSA_KEY_DERIVATION_INPUT_PASSWORD,
+                                              (const uint8_t *)pPass, PassLen);
+   }
+
+   if (status == PSA_SUCCESS)
+   {
+      status = psa_key_derivation_output_bytes(&Derive, EKSKey, sizeof(EKSKey));
+   }
+
+   /* In the finished or error state, abort is always safe */
+   psa_key_derivation_abort(&Derive);
+
+   if (status == PSA_SUCCESS)
    {
       rc = ES3_OK;
    }                                    
@@ -920,18 +1080,18 @@ static int EKSUnlock (void)
       if (wSlot < 100)
       {
          /* Version which supports only 0 to 99 slots */
-         snprintf(SlotName, sizeof(SlotName), "SD0:/eks/slot%02d.key", wSlot);
+         snprintf(SlotName, sizeof(SlotName), "SD0:/es3/slot%02d.key", wSlot);
          fd = _open(SlotName, _O_BINARY | _O_RDONLY);
          if (-1 == fd)
          {
             /* Version which supports more than 99 slots */
-            snprintf(SlotName, sizeof(SlotName), "SD0:/eks/slot%03d.key", wSlot);
+            snprintf(SlotName, sizeof(SlotName), "SD0:/es3/slot%03d.key", wSlot);
             fd = _open(SlotName, _O_BINARY | _O_RDONLY);
          }
       }
       else
       {
-         snprintf(SlotName, sizeof(SlotName), "SD0:/eks/slot%d.key", wSlot);
+         snprintf(SlotName, sizeof(SlotName), "SD0:/es3/slot%d.key", wSlot);
          fd = _open(SlotName, _O_BINARY | _O_RDONLY);
       }   
       
@@ -986,7 +1146,7 @@ static void EKSCheckInit (void)
    int fd;
    
    /* Read "key" */
-   fd = _open("SD0:/eks/eks.key", _O_BINARY | _O_RDONLY);
+   fd = _open("SD0:/es3/es3.key", _O_BINARY | _O_RDONLY);
    if (fd != -1)
    {
       _close(fd);
@@ -1014,11 +1174,11 @@ static int EKSFirstInit (char *pPass, size_t PassLen)
    int                        rc = ES3_ERR_EKS_PATH;
    FRESULT                    res;
    int                        fd;
-   static mbedtls_aes_context ctx;
+   uint8_t                    out[AES_DATA_BYTES_CNT];
    static uint8_t             data[AES_DATA_BYTES_CNT];
    
 
-   res = f_mkdir("eks");
+   res = f_mkdir("es3");
    if ((FR_OK == res) || (FR_EXIST == res))
    {
       rc = EKSCreateKey(pPass, PassLen);
@@ -1032,12 +1192,7 @@ static int EKSFirstInit (char *pPass, size_t PassLen)
          tal_CPURngHardwarePoll(data, sizeof(data));
          snprintf((char*)data, sizeof(data), "%s", EKSTest);
          
-         mbedtls_aes_init(&ctx);
-         mbedtls_aes_setkey_enc(&ctx, EKSKey, (EKS_KEY_LEN*8));
-         rc = mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT, 
-                                    (uint8_t*)data,
-                                    (uint8_t*)data);
-         mbedtls_aes_free(&ctx);
+         rc = AesEcbCrypt(EKSKey, 1, data, out);
       
          /* Check for AES error */
          if (rc != 0)
@@ -1048,14 +1203,14 @@ static int EKSFirstInit (char *pPass, size_t PassLen)
          {
             /* No AES error, write the "key" */
             rc = ES3_ERR_EKS_KEY_WRITE; 
-            fd = _open("SD0:/eks/eks.key", _O_BINARY | _O_WRONLY | _O_CREATE_ALWAYS);
+            fd = _open("SD0:/es3/es3.key", _O_BINARY | _O_WRONLY | _O_CREATE_ALWAYS);
             if (fd != -1)
             {
-               rc = _write(fd, data, sizeof(data));
+               rc = _write(fd, out, sizeof(out));
                _close(fd);
             
                /* Check write */
-               if (rc == (int)sizeof(data))
+               if (rc == (int)sizeof(out))
                {
                   rc = SlotCreate(0, ROOT_OF_TRUST);
                }
@@ -1267,7 +1422,7 @@ static int Unlock (char *pPass)
    int                        rc;
    size_t                     PassLen = strlen(pPass);
    int                        fd;
-   static mbedtls_aes_context ctx;
+   uint8_t                    out[AES_DATA_BYTES_CNT];
    static uint8_t             data[AES_DATA_BYTES_CNT];
 
 
@@ -1280,23 +1435,18 @@ static int Unlock (char *pPass)
    if (rc != 0) GOTO_END(ES3_ERROR);
 
    /* Read the key */   
-   fd = _open("SD0:/eks/eks.key", _O_BINARY | _O_RDONLY);
+   fd = _open("SD0:/es3/es3.key", _O_BINARY | _O_RDONLY);
    if (-1 == fd) GOTO_END(ES3_ERROR);
    _read(fd, data, sizeof(data));
    _close(fd);
          
    /* Decrypt the key */
-   mbedtls_aes_init(&ctx);
-   mbedtls_aes_setkey_dec(&ctx, EKSKey, (EKS_KEY_LEN*8));
-   rc = mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_DECRYPT, 
-                              (uint8_t*)data,
-                              (uint8_t*)data);
-   mbedtls_aes_free(&ctx);
+   rc = AesEcbCrypt(EKSKey, 0, data, out);
 
    if (rc != 0) GOTO_END(ES3_ERR_PASS_WRONG);
          
    /* Compare the key */
-   if (memcmp(data, EKSTest, sizeof(EKSTest)) != 0) GOTO_END(ES3_ERR_PASS_WRONG);
+   if (memcmp(out, EKSTest, sizeof(EKSTest)) != 0) GOTO_END(ES3_ERR_PASS_WRONG);
 
    /* The key is correct, unlock the EKS now */   
    rc = EKSUnlock();
@@ -2129,12 +2279,10 @@ static int VerifyRPC (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
    uint8_t                 bUser;
    ES3_SLOT               *pSlot = NULL;
    ES3_USER               *pUser = NULL;
-   uint8_t                *p;
    size_t                   len;
    mbedtls_pk_context       ctx;
-   mbedtls_sha256_context   sha_ctx;
-   mbedtls_entropy_context  entropy;
-   mbedtls_ctr_drbg_context ctr_drbg;
+   psa_hash_operation_t      HashOp  = PSA_HASH_OPERATION_INIT;
+   size_t                   HashLen = 0;
    uint8_t                  Hash[32];
    size_t                   SigLen;
    
@@ -2148,10 +2296,7 @@ static int VerifyRPC (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
     */
 
    /* Prepare key generation */
-   mbedtls_sha256_init(&sha_ctx);
    mbedtls_pk_init(&ctx);
-   mbedtls_ctr_drbg_init(&ctr_drbg);
-   mbedtls_entropy_init(&entropy);
    
    
    /* 
@@ -2212,9 +2357,7 @@ static int VerifyRPC (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
     */   
     
    /* Check if this is a valid key */
-   p   = pUser->PubKeyRaw;
-   len = pUser->wPubKeyRawLen;
-   rc = mbedtls_pk_parse_subpubkey(&p, p + len, &ctx);
+   rc = mbedtls_pk_parse_public_key(&ctx, pUser->PubKeyRaw, pUser->wPubKeyRawLen);
    if (rc != 0) GOTO_END(ES3_RPC_ERR_ECC);
    
    /* At this point we have a valid ECC key */
@@ -2225,14 +2368,17 @@ static int VerifyRPC (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
     */
 
    /* Start the HASH */
-   mbedtls_sha256_starts(&sha_ctx, 0);
+   rc = psa_hash_setup(&HashOp, PSA_ALG_SHA_256);
+   if (rc != PSA_SUCCESS) GOTO_END(ES3_RPC_ERR_ECC);
 
    /* Calculate the hash over the data */
    len = pRxMsg->Header.Len;
-   mbedtls_sha256_update(&sha_ctx, (uint8_t*)&pRxMsg->Data, len);
+   rc  = psa_hash_update(&HashOp, (uint8_t*)&pRxMsg->Data, len);
+   if (rc != PSA_SUCCESS) GOTO_END(ES3_RPC_ERR_ECC);
 
    /* Get result */
-   mbedtls_sha256_finish(&sha_ctx, Hash);    
+   rc = psa_hash_finish(&HashOp, Hash, sizeof(Hash), &HashLen);
+   if ((rc != PSA_SUCCESS) || (HashLen != sizeof(Hash))) GOTO_END(ES3_RPC_ERR_ECC);    
    
    
    /*
@@ -2253,9 +2399,7 @@ end:
 
    /* Free the mbedTLS content */
    mbedtls_pk_free(&ctx);
-   mbedtls_ctr_drbg_free(&ctr_drbg);
-   mbedtls_entropy_free(&entropy);
-   mbedtls_sha256_free(&sha_ctx);   
+   (void)psa_hash_abort(&HashOp);   
    
    return(rc);
 } /* VerifyRPC */
@@ -2274,8 +2418,6 @@ static void HandleSignReq (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
    ES3_SLOT               *pSlot = NULL;
    size_t                   len;
    mbedtls_pk_context       ctx;
-   mbedtls_entropy_context  entropy;
-   mbedtls_ctr_drbg_context ctr_drbg;
    size_t                   SigLen;
    
    /*
@@ -2291,9 +2433,7 @@ static void HandleSignReq (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
 
    /* Prepare key generation */
    mbedtls_pk_init(&ctx);
-   mbedtls_ctr_drbg_init(&ctr_drbg);
-   mbedtls_entropy_init(&entropy);
-   
+
    /*
     * 1 to 6 was done before by VerifyRPC
     */
@@ -2327,12 +2467,7 @@ static void HandleSignReq (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
     * 7. Read private key 
     */
    len = strlen((char*)pSlot->Priv) + 1;
-   rc = mbedtls_pk_parse_key(&ctx, pSlot->Priv, len, NULL, 0,
-                             mbedtls_ctr_drbg_random, &ctr_drbg);
-   if(rc != 0) GOTO_END(ES3_RPC_ERR_ECC);
-
-   /* Seed the random generator */
-   rc =  mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, (const unsigned char*)"TinyES3", 7);
+   rc = mbedtls_pk_parse_key(&ctx, pSlot->Priv, len, NULL, 0);
    if(rc != 0) GOTO_END(ES3_RPC_ERR_ECC);
 
 
@@ -2340,8 +2475,8 @@ static void HandleSignReq (es3_msg_t *pRxMsg, es3_msg_t *pTxMsg)
     * 8. Create signature for the given hash 
     */
    SigLen = ES3_RPC_SIG_SIZE;
-   rc = mbedtls_pk_sign(&ctx, MBEDTLS_MD_SHA256, pRxMsg->Data.cSign.Hash, 0, 
-                        pTxMsg->Data.rSign.Sig, sizeof(pTxMsg->Data.rSign.Sig), &SigLen, mbedtls_ctr_drbg_random, &ctr_drbg);
+   rc = mbedtls_pk_sign(&ctx, MBEDTLS_MD_SHA256, pRxMsg->Data.cSign.Hash, 0,
+                        pTxMsg->Data.rSign.Sig, sizeof(pTxMsg->Data.rSign.Sig), &SigLen);
    if(rc != 0) GOTO_END(ES3_RPC_ERR_ECC);
 
    /* Signature successful created */      
@@ -2355,8 +2490,6 @@ end:
 
    /* Free the mbedTLS content */
    mbedtls_pk_free(&ctx);
-   mbedtls_ctr_drbg_free(&ctr_drbg);
-   mbedtls_entropy_free(&entropy);
 
 } /* HandleSignReq */
 
@@ -2597,6 +2730,8 @@ static void ES3Task (void *arg)
              (ES3_RPC_HEADER_MAGIC_2  == pRxMsg->Header.Magic2)  && 
              (ES3_RPC_SIZEVER         == pRxMsg->Header.SizeVer) )
          {
+            memset(TxBuffer, 0x00, sizeof(TxBuffer));
+            
             HandleRPC(pRxMsg, pTxMsg, Size);
 
             /* Send response */               

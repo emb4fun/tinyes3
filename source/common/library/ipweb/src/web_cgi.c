@@ -2,32 +2,32 @@
 *  Copyright (c) 2015 by Michael Fischer (www.emb4fun.de).
 *  All rights reserved.
 *
-*  Redistribution and use in source and binary forms, with or without 
-*  modification, are permitted provided that the following conditions 
+*  Redistribution and use in source and binary forms, with or without
+*  modification, are permitted provided that the following conditions
 *  are met:
-*  
-*  1. Redistributions of source code must retain the above copyright 
+*
+*  1. Redistributions of source code must retain the above copyright
 *     notice, this list of conditions and the following disclaimer.
 *
 *  2. Redistributions in binary form must reproduce the above copyright
-*     notice, this list of conditions and the following disclaimer in the 
+*     notice, this list of conditions and the following disclaimer in the
 *     documentation and/or other materials provided with the distribution.
 *
-*  3. Neither the name of the author nor the names of its contributors may 
-*     be used to endorse or promote products derived from this software 
+*  3. Neither the name of the author nor the names of its contributors may
+*     be used to endorse or promote products derived from this software
 *     without specific prior written permission.
 *
-*  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
-*  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
-*  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS 
-*  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL 
-*  THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, 
-*  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
-*  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS 
-*  OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED 
-*  AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
-*  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF 
-*  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
+*  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+*  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+*  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+*  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+*  THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+*  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+*  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+*  OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+*  AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+*  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+*  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 *  SUCH DAMAGE.
 *
 ***************************************************************************
@@ -59,7 +59,7 @@
 
 #include "terminal.h"
 
-#if !defined(IP_WEB_CGI_EXT_CST) 
+#if !defined(IP_WEB_CGI_EXT_CST)
 #define _IP_WEB_CGI_EXT_CST   0
 #else
 #define _IP_WEB_CGI_EXT_CST   IP_WEB_CGI_EXT_CST
@@ -108,7 +108,7 @@ extern uint8_t __stack_und_end__[];
 
 #endif /* defined(__ARM_ARCH_4T__) || defined(__ARM_ARCH_7A__) */
 
-#if defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_7M__)
+#if defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_8M_MAINLINE__)
 
 extern uint8_t __stack_start__[];
 extern uint8_t __stack_end__[];
@@ -116,7 +116,7 @@ extern uint8_t __stack_end__[];
 extern uint8_t __stack_process_start__[];
 extern uint8_t __stack_process_end__[];
 
-#endif /* defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_7M__) */
+#endif /* defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_8M_MAINLINE__) */
 
 extern char   *LastUpdateName;
 extern uint8_t LastUpdateError;
@@ -139,7 +139,7 @@ void Time64Init (void);
    {                                \
       s_puts(",", (_b)->s_stream);  \
    }                                \
-}      
+}
 
 #define MAX_CGI_LIST_ENTRY    32
 
@@ -258,12 +258,12 @@ static int UploadFile (HTTPD_SESSION *hs, web_upload_t *Info)
                   if (upname) {
                      memcpy(upname, sub_ptr, (size_t)sub_len);
                      upname[sub_len] = 0;
-                           
+
                      Info->pFileName = xstrdup(XM_ID_WEB, upname);
-                     xfree(upname);    
+                     xfree(upname);
                   }
                }
-               
+
 
                /* Receive the binary data. */
                filesize = 0;
@@ -293,7 +293,7 @@ static int UploadFile (HTTPD_SESSION *hs, web_upload_t *Info)
                      break;
                   }
                   avail -= got;
-                  
+
                   /* Write data to the local file, if one had been opened. */
                   //term_printf(".");
                   if (eol) {
@@ -301,13 +301,13 @@ static int UploadFile (HTTPD_SESSION *hs, web_upload_t *Info)
 #if (_IP_WEB_UPLOAD_MODE_SD_TEMP == 0)
                      if ((filesize + 2) < Info->lBufferSize)
                      {
-                       Info->pBuffer[filesize++] = '\r';
-                       Info->pBuffer[filesize++] = '\n';
+                        Info->pBuffer[filesize++] = '\r';
+                        Info->pBuffer[filesize++] = '\n';
                      }
                      else
                      {
-                       Info->Error = 1;
-                     }  
+                        Info->Error = 1;
+                     }
 #else                     
                      rc = _write(fd, "\r\n", 2);
                      if (rc > 0)
@@ -325,7 +325,7 @@ static int UploadFile (HTTPD_SESSION *hs, web_upload_t *Info)
                      eol = 1;
                      got -= 2;
                   }
-                       
+
                   /* Write data is memory is available */
 #if (_IP_WEB_UPLOAD_MODE_SD_TEMP == 0)
                   if ((filesize + got) < Info->lBufferSize)
@@ -346,7 +346,7 @@ static int UploadFile (HTTPD_SESSION *hs, web_upload_t *Info)
                   filesize += got;
                }
                //term_printf("\r\n");
-                   
+
 #if (_IP_WEB_UPLOAD_MODE_SD_TEMP >= 1)
                if (fd != -1)
                {
@@ -355,7 +355,7 @@ static int UploadFile (HTTPD_SESSION *hs, web_upload_t *Info)
 #endif               
 
                Info->lFileSize = filesize;
-                   
+
                if (got < 0) {
                   /* Broken connection. */
                   break;
@@ -392,17 +392,17 @@ static int UploadFile (HTTPD_SESSION *hs, web_upload_t *Info)
          }
       }
    }
-   
+
    if ((NULL == Info->pFileName) || (0 == Info->lFileSize))
    {
       Info->Error = 5;
    }
-   
+
    xfree(delim);
    xfree(line);
-   
+
    return(0);
-} /* UploadFile */ 
+} /* UploadFile */
 
 /*************************************************************************/
 /*  GetStackFreeCount                                                    */
@@ -414,12 +414,12 @@ static int UploadFile (HTTPD_SESSION *hs, web_upload_t *Info)
 static uint32_t GetStackFreeCount (uint8_t *pStart, uint8_t *pEnd)
 {
    uint32_t dFreeCount = 0;
-   
+
    while(pStart < pEnd)
    {
       if (*pStart == 0xCC)
       {
-         dFreeCount++;   
+         dFreeCount++;
       }
       else
       {
@@ -427,7 +427,7 @@ static uint32_t GetStackFreeCount (uint8_t *pStart, uint8_t *pEnd)
       }
       pStart++;
    }
-   
+
    return(dFreeCount);
 } /* GetStackFreeCount */
 
@@ -445,18 +445,18 @@ static int NetSet (HTTPD_SESSION *hs)
    char    *pVal;
    char    *pRedir = NULL;
    uint32_t  IPAddr   = 0;
-   uint32_t  NETMask  = 0; 
+   uint32_t  NETMask  = 0;
    uint32_t  GWAddr   = 0;
-   uint32_t  DNSAddr  = 0; 
-   uint32_t  DNSAddr2 = 0; 
+   uint32_t  DNSAddr  = 0;
+   uint32_t  DNSAddr2 = 0;
    uint32_t  SyslAddr = 0;
    uint32_t  UseTNPES = 0;
-   uint32_t  UseDHCP  = 0; 
+   uint32_t  UseDHCP  = 0;
    uint32_t dPermission = hs->s_req.req_sid_perm;
    NVM_IP    IP;
 
    Avail = hs->s_req.req_length;
-   while (Avail) 
+   while (Avail)
    {
       pArg = HttpArgReadNext(hs, &Avail);
       if (pArg != NULL)
@@ -506,9 +506,9 @@ static int NetSet (HTTPD_SESSION *hs)
             {
                pRedir = xstrdup(XM_ID_WEB, pVal);
             }
-         }            
+         }
       }
-   } 
+   }
 
    if (pRedir != NULL)
    {
@@ -516,7 +516,7 @@ static int NetSet (HTTPD_SESSION *hs)
       {
          nvm_IPUseTNPESSet(UseTNPES);
          nvm_IPUseDHCPSet(UseDHCP);
-         
+
          nvm_IPGet(&IP);
          IP.dIPAddr  = IPAddr;
          IP.dNETMask = NETMask;
@@ -525,12 +525,12 @@ static int NetSet (HTTPD_SESSION *hs)
          IP.dDNS2Addr = DNSAddr2;
          IP.dSYSAddr  = SyslAddr;
          nvm_IPSet(&IP);
-            
+
          HttpSendRedirection(hs, 303, pRedir, NULL);
 
          /*
           * Update new settings and reboot
-          */ 
+          */
          nvm_Write();
          OS_TimeDly(2000);
          tal_CPUReboot();
@@ -538,11 +538,11 @@ static int NetSet (HTTPD_SESSION *hs)
       else
       {
          HttpSendRedirection(hs, 303, "/403.htm", NULL);
-      }         
-   }      
+      }
+   }
 
    xfree(pRedir);
-   
+
    (void)DNSAddr2;
    (void)SyslAddr;
 
@@ -565,7 +565,7 @@ static int TimeGet (HTTPD_SESSION *hs)
    uint32_t  Time;
    struct tm TMUTC;
    struct tm TM;
-   
+
    IP_WEBS_CGISendHeader(hs);
 
    /* Get time info */
@@ -576,11 +576,11 @@ static int TimeGet (HTTPD_SESSION *hs)
 
    Avail = hs->s_req.req_length;
    s_puts("{", hs->s_stream);
-   
-   while (Avail) 
+
+   while (Avail)
    {
       pArg = HttpArgReadNext(hs, &Avail);
-      if      (strcmp(pArg, "date") == 0) 
+      if      (strcmp(pArg, "date") == 0)
       {
          CHECK_JSON_COMMA(First, hs);
          s_printf(hs->s_stream, "\"date\":\"%02d.%02d.%04d\"",
@@ -620,15 +620,15 @@ static int TimeGet (HTTPD_SESSION *hs)
          else
          {
             s_printf(hs->s_stream, "\"dst\":\"1\"");
-         }            
+         }
       }
       else if (strcmp(pArg, "ntpsync") == 0)
       {
-         
+
          CHECK_JSON_COMMA(First, hs);
          s_printf(hs->s_stream, "\"ntpsync\":\"%ld\"", IP_SNTP_NextSyncGet());
       }
-      
+
       else if (strcmp(pArg, "uptime") == 0)
       {
          uint32_t Uptime = OS_TimeGetSeconds();
@@ -636,14 +636,14 @@ static int TimeGet (HTTPD_SESSION *hs)
          int      Hour = 0;
          int      Min  = 0;
          int      Sec  = 0;
-   
+
          Day     = (int)(Uptime / 86400); /*lint !e838*/
          Uptime %= 86400;
          Hour    = (int)(Uptime / 3600);  /*lint !e838*/
          Uptime %= 3600;
          Min     = (int)(Uptime / 60);    /*lint !e838*/
          Sec     = (int)(Uptime % 60);    /*lint !e838*/
-         
+
          CHECK_JSON_COMMA(First, hs);
          s_printf(hs->s_stream, "\"uptime\":\"%dd %02dh %02dm %02ds\"",
                   Day, Hour, Min, Sec);
@@ -689,9 +689,9 @@ static int TimeSet (HTTPD_SESSION *hs)
    time_t    Localtime;
    time_t    Unixtime;
    uint32_t dPermission = hs->s_req.req_sid_perm;
-   
+
    Avail = hs->s_req.req_length;
-   while (Avail) 
+   while (Avail)
    {
       pArg = HttpArgReadNext(hs, &Avail);
       if (pArg != NULL)
@@ -711,9 +711,9 @@ static int TimeSet (HTTPD_SESSION *hs)
             {
                pRedir = xstrdup(XM_ID_WEB, pVal);
             }
-         }            
+         }
       }
-   }   
+   }
 
    /* Check if all required parameters are available */
    if ((pRedir != NULL) && (pDate != NULL) && (pTime != NULL))
@@ -731,7 +731,7 @@ static int TimeSet (HTTPD_SESSION *hs)
          Hour = ((pTime[0] - '0') * 10)   + (pTime[1] - '0');
          Min  = ((pTime[3] - '0') * 10)   + (pTime[4] - '0');
          Sec  = ((pTime[6] - '0') * 10)   + (pTime[7] - '0');
-      
+
          /* Convert to local time */
          TM.tm_mday = Day;
          TM.tm_mon  = Mon - 1;
@@ -739,22 +739,22 @@ static int TimeSet (HTTPD_SESSION *hs)
          TM.tm_hour = Hour;
          TM.tm_min  = Min;
          TM.tm_sec  = Sec;
-         Localtime  = mktime(&TM); 
-      
+         Localtime  = mktime(&TM);
+
          /* Convert Loctime to Unixtime */
          Unixtime = (Localtime - OS_TimezoneSecGet()) - OS_TimezoneDstSecGet();
          OS_UnixtimeSet((uint32_t)Unixtime);
-         
+
          tal_BoardRTCSetTM(&TM);
-          
+
          HttpSendRedirection(hs, 303, pRedir, NULL);
       }
       else
       {
          HttpSendRedirection(hs, 303, "/403.htm", NULL);
-      }         
-   }   
-   
+      }
+   }
+
    xfree(pDate);
    xfree(pTime);
    xfree(pRedir);
@@ -780,9 +780,9 @@ static int TimezoneSet (HTTPD_SESSION *hs)
    int8_t    Dst = 0;
    uint32_t dPermission = hs->s_req.req_sid_perm;
    NVM_TIME  Time;
-   
+
    Avail = hs->s_req.req_length;
-   while (Avail) 
+   while (Avail)
    {
       pArg = HttpArgReadNext(hs, &Avail);
       if (pArg != NULL)
@@ -806,10 +806,10 @@ static int TimezoneSet (HTTPD_SESSION *hs)
             {
                pRedir = xstrdup(XM_ID_WEB, pVal);
             }
-         }            
+         }
       }
-   }   
-      
+   }
+
    /* Check for valid pRedir */
    if ((pRedir != NULL) && (TimezoneID != -1) && (Offset != -1))
    {
@@ -818,22 +818,22 @@ static int TimezoneSet (HTTPD_SESSION *hs)
          OS_TimezoneIDSet(TimezoneID);
          OS_TimezoneMinSet(Offset);
          OS_TimezoneDstSet(Dst);
-         
+
          nvm_TimeGet(&Time);
          Time.nZoneID     = TimezoneID;
          Time.nZoneOffset = Offset;
          Time.nZoneDst    = Dst;
          nvm_TimeSet(&Time);
-      
+
          nvm_Write();
-      
+
          HttpSendRedirection(hs, 303, pRedir, NULL);
       }
       else
       {
          HttpSendRedirection(hs, 303, "/403.htm", NULL);
-      }         
-   }      
+      }
+   }
 
    xfree(pRedir);
 
@@ -862,7 +862,7 @@ static int TimeNTPSet (HTTPD_SESSION *hs)
    NVM_TIME  Time;
 
    Avail = hs->s_req.req_length;
-   while (Avail) 
+   while (Avail)
    {
       pArg = HttpArgReadNext(hs, &Avail);
       if (pArg != NULL)
@@ -886,45 +886,45 @@ static int TimeNTPSet (HTTPD_SESSION *hs)
             {
                pRedir = xstrdup(XM_ID_WEB, pVal);
             }
-         }            
+         }
       }
-   } 
-   
+   }
+
    if (pRedir != NULL)
    {
       if (PERMISSION_ADMIN == dPermission)
       {
          nvm_TimeGet(&Time);
-         
+
          OldNTPAddr = Time.dNTPAddr;
          OldRefresh = Time.dNTPRefresh;
-   
+
          IP_SNTP_ServerSet(NTPAddr);
          IP_SNTP_RefreshSet(Refresh);
-         
+
          Time.dNTPAddr    = NTPAddr;
          Time.dNTPRefresh = Refresh;
-         
+
          nvm_TimeSet(&Time);
-         
+
          /* Check if we must save the new values */
          if ((NTPAddr != OldNTPAddr) || (Refresh != OldRefresh))
          {
             nvm_Write();
-         }   
-      
+         }
+
          if (1 == Sync)
          {
             IP_SNTP_TimeGet();
          }
-      
+
          HttpSendRedirection(hs, 303, pRedir, NULL);
       }
       else
       {
          HttpSendRedirection(hs, 303, "/403.htm", NULL);
-      }         
-   }      
+      }
+   }
 
    xfree(pRedir);
 
@@ -946,7 +946,7 @@ static int TimeSyncSNTP (HTTPD_SESSION *hs)
    char    *pRedir = NULL;
 
    Avail = hs->s_req.req_length;
-   while (Avail) 
+   while (Avail)
    {
       pArg = HttpArgReadNext(hs, &Avail);
       if (pArg != NULL)
@@ -958,15 +958,15 @@ static int TimeSyncSNTP (HTTPD_SESSION *hs)
             {
                pRedir = xstrdup(XM_ID_WEB, pVal);
             }
-         }            
+         }
       }
-   } 
-   
+   }
+
    if (pRedir != NULL)
    {
       IP_SNTP_TimeSync();
       HttpSendRedirection(hs, 303, pRedir, NULL);
-   }      
+   }
 
    xfree(pRedir);
 
@@ -991,27 +991,27 @@ static int StatStack (HTTPD_SESSION *hs)
    uint32_t  dFree;
    uint16_t  wTime1;
    uint16_t  wTime2;
-   uint16_t  wDimCnt = 0;   
-   
+   uint16_t  wDimCnt = 0;
+
    IP_WEBS_CGISendHeader(hs);
 
    /* Get start of list */
-   pTCB = OS_TaskGetList(); 
+   pTCB = OS_TaskGetList();
    while (pTCB != NULL)
    {
       /* Start of row */
       if (0 == (wDimCnt & 0x01))
-      { 
+      {
          s_printf(hs->s_stream, "<tr>\r\n");
       }
       else
       {
          s_printf(hs->s_stream, "<tr class=\"dim\">\r\n");
-      }   
-      
-      /* colum start */ 
+      }
+
+      /* colum start */
       s_printf(hs->s_stream, "  <td>&nbsp;</td>\r\n");
-   
+
       /* colum task name */
       if (pTCB->Name[0] != 0)
       {
@@ -1028,26 +1028,26 @@ static int StatStack (HTTPD_SESSION *hs)
       dFree  = GetStackFreeCount(pStart, pEnd);
       wTime1 = (uint16_t)(pTCB->dStatUsage / 100);
       wTime2 = (uint16_t)(pTCB->dStatUsage % 100);
-      
+
       /* colum prio, size, used, free and cpu load  */
       s_printf(hs->s_stream, "  <td>%d</td>\r\n",       pTCB->nPrio);
       s_printf(hs->s_stream, "  <td>%d</td>\r\n",       dSize);
       s_printf(hs->s_stream, "  <td>%d</td>\r\n",       (dSize - dFree));
       s_printf(hs->s_stream, "  <td>%d</td>\r\n",       dFree);
       s_printf(hs->s_stream, "  <td>%2d.%02d</td>\r\n", wTime1, wTime2);
-      
-      /* colum end */ 
+
+      /* colum end */
       s_printf(hs->s_stream, "  <td>\r\n");
-      
-      /* row end */ 
+
+      /* row end */
       s_printf(hs->s_stream, "</td>");
-      
+
       s_flush(hs->s_stream);
-      
+
       wDimCnt++;
       pTCB = pTCB->pTaskNext;
-   } 
-         
+   }
+
    return(0);
 } /* StatStack */
 
@@ -1064,7 +1064,7 @@ static int StatRun (HTTPD_SESSION *hs)
 {
    uint32_t dSize;
    uint32_t dFree;
-   
+
    IP_WEBS_CGISendHeader(hs);
 
 #if defined(__ARM_ARCH_4T__) || defined(__ARM_ARCH_7A__)
@@ -1080,7 +1080,7 @@ static int StatRun (HTTPD_SESSION *hs)
    s_printf(hs->s_stream, "  <td>%4d</td>\r\n", dFree);
    s_printf(hs->s_stream, "  <td>&nbsp;</td>\r\n");
    s_printf(hs->s_stream, "</tr>\r\n");
-   
+
    /* IRQ Stack */
    dSize = (uint32_t)(__stack_irq_end__ - __stack_irq_start__);
    dFree = GetStackFreeCount(__stack_irq_start__, __stack_irq_end__);
@@ -1140,10 +1140,10 @@ static int StatRun (HTTPD_SESSION *hs)
    s_printf(hs->s_stream, "  <td>%4d</td>\r\n", dFree);
    s_printf(hs->s_stream, "  <td>&nbsp;</td>\r\n");
    s_printf(hs->s_stream, "</tr>\r\n");
-   
+
 #endif /* defined(__ARM_ARCH_4T__) || defined(__ARM_ARCH_7A__) */
 
-#if defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_7M__)
+#if defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_8M_MAINLINE__)
 
    /* Main Stack */
    dSize = (uint32_t)(__stack_end__ - __stack_start__);
@@ -1156,7 +1156,7 @@ static int StatRun (HTTPD_SESSION *hs)
    s_printf(hs->s_stream, "  <td>%4d</td>\r\n", dFree);
    s_printf(hs->s_stream, "  <td>&nbsp;</td>\r\n");
    s_printf(hs->s_stream, "</tr>\r\n");
-   
+
    /* Process Stack */
    dSize = (uint32_t)(__stack_process_end__ - __stack_process_start__);
    dFree = GetStackFreeCount(__stack_process_start__, __stack_process_end__);
@@ -1169,8 +1169,8 @@ static int StatRun (HTTPD_SESSION *hs)
    s_printf(hs->s_stream, "  <td>&nbsp;</td>\r\n");
    s_printf(hs->s_stream, "</tr>\r\n");
 
-#endif /* defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_7M__) */
-   
+#endif /* defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_8M_MAINLINE__) */
+
    return(0);
 } /* StatRun */
 
@@ -1191,9 +1191,9 @@ static int StatMem (HTTPD_SESSION *hs)
    uint32_t dFree;
    uint32_t dPeak;
    uint16_t wNext;
-   uint16_t wIndex = 0;   
-   uint16_t wDimCnt = 0;   
-   
+   uint16_t wIndex = 0;
+   uint16_t wDimCnt = 0;
+
    IP_WEBS_CGISendHeader(hs);
 
    pName = tal_MEMInfoGet(wIndex, &dSize, &dUsed, &dFree, &dPeak, &wNext);
@@ -1203,39 +1203,39 @@ static int StatMem (HTTPD_SESSION *hs)
       {
          /* Start of row */
          if (0 == (wDimCnt & 0x01))
-         { 
+         {
             s_printf(hs->s_stream, "<tr>\r\n");
          }
          else
          {
             s_printf(hs->s_stream, "<tr class=\"dim\">\r\n");
-         }   
-      
-         /* colum start */ 
+         }
+
+         /* colum start */
          s_printf(hs->s_stream, "  <td>&nbsp;</td>\r\n");
-           
+
          s_printf(hs->s_stream, "  <td>%s</td>\r\n", pName);
          s_printf(hs->s_stream, "  <td style=\"text-align:right\">%d</td>\r\n", dSize);
          s_printf(hs->s_stream, "  <td style=\"text-align:right\">%d</td>\r\n", dUsed);
          s_printf(hs->s_stream, "  <td style=\"text-align:right\">%d</td>\r\n", dFree);
          s_printf(hs->s_stream, "  <td style=\"text-align:right\">%d</td>\r\n", dPeak);
-      
-         /* colum end */ 
+
+         /* colum end */
          s_printf(hs->s_stream, "  <td>\r\n");
-      
-         /* row end */ 
+
+         /* row end */
          s_printf(hs->s_stream, "</td>");
-      
+
          s_flush(hs->s_stream);
-         
+
          wDimCnt++;
-      }         
-      
+      }
+
       wIndex++;
 
       pName = tal_MEMInfoGet(wIndex, &dSize, &dUsed, &dFree, &dPeak, &wNext);
-   }   
-   
+   }
+
    return(0);
 } /* StatMem */
 
@@ -1267,7 +1267,7 @@ static int Upload (HTTPD_SESSION *hs)
 {
    web_upload_t Info;
    int         nErr = -1;
-   
+
 #if (_IP_WEB_UPLOAD_MODE_SD_TEMP == 0)
    if (NULL == UploadBuffer)
    {
@@ -1285,8 +1285,8 @@ static int Upload (HTTPD_SESSION *hs)
 
    if (0 == Info.Error)
    {
-      nErr = fs_Upload(&Info);      
-      
+      nErr = fs_Upload(&Info);
+
       xfree(LastUpdateName);
       if (Info.pFileName != NULL)
       {
@@ -1302,27 +1302,27 @@ static int Upload (HTTPD_SESSION *hs)
    {
       LastUpdateError = (uint8_t)Info.Error;
    }
-   
+
    if (0 == nErr)
    {
       if (Info.pRedirOK != NULL)
       {
          HttpSendRedirection(hs, 303, Info.pRedirOK, NULL);
-      }         
+      }
    }
    else
    {
       if (Info.pRedirERR != NULL)
       {
          HttpSendRedirection(hs, 303, Info.pRedirERR, NULL);
-      }         
+      }
    }
 
    xfree(Info.pFileName);
    xfree(Info.pType);
    xfree(Info.pRedirOK);
    xfree(Info.pRedirERR);
-   
+
    xfree(UploadBuffer);
    UploadBuffer = NULL;
 
@@ -1348,16 +1348,16 @@ static int Upgrade (HTTPD_SESSION *hs)
    uint8_t bType     = 0;
 
    Avail = hs->s_req.req_length;
-   while (Avail) 
+   while (Avail)
    {
       pArg = HttpArgReadNext(hs, &Avail);
       if (pArg != NULL)
       {
          pVal = HttpArgValue(&hs->s_req);
          if (pVal)
-         {            
+         {
             if      (strcmp(pArg, "buffer") == 0)
-            {  
+            {
                bIndex = (uint8_t)atoi(pVal);
             }
             else if (strcmp(pArg, "type") == 0)
@@ -1365,13 +1365,13 @@ static int Upgrade (HTTPD_SESSION *hs)
                if      (0 == strcmp(pVal, "web"))
                {
                   bType = 1;
-               } 
+               }
                else if (0 == strcmp(pVal, "fw"))
                {
                   bType = 2;
                }
             }
-            
+
             else if (strcmp(pArg, "redir_ok") == 0)
             {
                pRedirOK = xstrdup(XM_ID_WEB, pVal);
@@ -1380,10 +1380,10 @@ static int Upgrade (HTTPD_SESSION *hs)
             {
                pRedirERR = xstrdup(XM_ID_WEB, pVal);
             }
-         }            
+         }
       }
-   }   
-   
+   }
+
    if ((pRedirOK != NULL) && (pRedirERR != NULL))
    {
       if ((1 == bIndex) || (2 == bIndex))
@@ -1397,22 +1397,22 @@ static int Upgrade (HTTPD_SESSION *hs)
       }
 
       if (0 == nErr)
-      {   
+      {
          HttpSendRedirection(hs, 303, pRedirOK, NULL);
-            
+
          if (2 == bType)
-         {         
+         {
             OS_TimeDly(2000);
             tal_CPUReboot();
-         }            
+         }
       }
       else
       {
          LastUpdateError = 6;
          HttpSendRedirection(hs, 303, pRedirERR, NULL);
-      }   
+      }
    }
-   
+
    xfree(pRedirOK);
    xfree(pRedirERR);
 
@@ -1435,11 +1435,11 @@ static int Upgrade (HTTPD_SESSION *hs)
 void IP_WEBS_CGIInit (void)
 {
    memset(ListTable, 0x00, sizeof(ListTable));
-   
+
    IP_WEBS_CGIListAdd((CGI_LIST_ENTRY*)CGIList);
-   
+
    Time64Init();
-   
+
 } /* IP_WEBS_CGIInit */
 
 /*************************************************************************/
@@ -1454,13 +1454,13 @@ void IP_WEBS_CGIInit (void)
 void IP_WEBS_CGIListAdd (CGI_LIST_ENTRY *pList)
 {
    uint16_t Index;
-   
+
    for(Index = 0; Index < MAX_CGI_LIST_ENTRY; Index++)
    {
       if (0 == ListTable[Index])
       {
          ListTable[Index] = pList;
-         break;   
+         break;
       }
    }
 
@@ -1480,25 +1480,25 @@ void IP_WEBS_CGIStart (void)
    uint16_t         ListIndex = 0;
    CGI_LIST_ENTRY *pList;
 
-   /* Loop over the registered lists */   
+   /* Loop over the registered lists */
    while ((ListIndex != MAX_CGI_LIST_ENTRY) && (ListTable[ListIndex] != NULL))
    {
       /* Get list */
-      pList = ListTable[ListIndex];   
+      pList = ListTable[ListIndex];
 
-      /* Loop over the actual list */   
+      /* Loop over the actual list */
       while(pList->Var != NULL)
       {
          HttpRegisterCgiFunction(pList->Var,  pList->pFunc);
-   
+
          /* Switch to next entry inside the list */
          pList++;
       }
-      
-      /* Switch to next list */  
+
+      /* Switch to next list */
       ListIndex++;
-   }      
-   
+   }
+
 } /* IP_WEBS_CGIStart */
 
 /*************************************************************************/
@@ -1514,11 +1514,11 @@ void IP_WEBS_CGISendHeader (HTTPD_SESSION *hs)
 {
    HttpSendHeaderTop(hs, 200);
    s_puts("Cache-Control: no-cache, must-revalidate\r\n", hs->s_stream);
-   s_puts("Expires: Sat, 26 Jul 1997 05:00:00 GMT\r\n", hs->s_stream);   
-   HttpSendHeaderBottom(hs, NULL, NULL, -1, 0);   
-   
+   s_puts("Expires: Sat, 26 Jul 1997 05:00:00 GMT\r\n", hs->s_stream);
+   HttpSendHeaderBottom(hs, NULL, NULL, -1, 0);
+
    s_set_flags(hs->s_stream, S_FLG_CHUNKED);
-   
+
 } /* IP_WEBS_CGISendHeader */
 
 /*************************************************************************/
@@ -1534,11 +1534,11 @@ void IP_WEBS_CGISendHeaderOctetStream (HTTPD_SESSION *hs)
 {
    HttpSendHeaderTop(hs, 200);
    s_puts("Cache-Control: no-cache, must-revalidate\r\n", hs->s_stream);
-   s_puts("Expires: Sat, 26 Jul 1997 05:00:00 GMT\r\n", hs->s_stream);   
-   HttpSendHeaderBottom(hs, "application", "octet-stream", -1, 0);   
-   
+   s_puts("Expires: Sat, 26 Jul 1997 05:00:00 GMT\r\n", hs->s_stream);
+   HttpSendHeaderBottom(hs, "application", "octet-stream", -1, 0);
+
    s_set_flags(hs->s_stream, S_FLG_CHUNKED);
-   
+
 } /* IP_WEBS_CGISendHeaderOctetStream */
 
 
@@ -1554,20 +1554,20 @@ static const CGI_LIST_ENTRY CGIList[] =   /*lint !e31*/
    { "cgi-bin/time_zone_set.cgi",   TimezoneSet  },
    { "cgi-bin/time_ntp_set.cgi",    TimeNTPSet   },
    { "cgi-bin/time_sync_sntp.cgi",  TimeSyncSNTP },
-   
-   { "cgi-bin/stat_stack.cgi",      StatStack    },   
-   { "cgi-bin/stat_run.cgi",        StatRun      },   
-   { "cgi-bin/stat_mem.cgi",        StatMem      },   
-   
+
+   { "cgi-bin/stat_stack.cgi",      StatStack    },
+   { "cgi-bin/stat_run.cgi",        StatRun      },
+   { "cgi-bin/stat_mem.cgi",        StatMem      },
+
    { "cgi-bin/cpuload.cgi",         CPULoad      },
-   
+
    { "cgi-bin/upload.cgi",          Upload       },
    { "cgi-bin/upgrade.cgi",         Upgrade      },
 
 #if (_IP_WEB_CGI_EXT_CST >= 1)
    WEB_CGI_EXT_CST
-#endif   
-      
+#endif
+
    {NULL, NULL}
 };
 

@@ -200,7 +200,7 @@ extern "C" {
 #define SOC_EDMA3_NUM_DMACH                 64
 #define SOC_EDMA3_NUM_QDMACH                8
 #define SOC_EDMA3_NUM_PARAMSETS             256
-#define SOC_EDMA3_NUM_EVQUE                 4
+#define SOC_EDMA3_NUM_EVQUE                 3
 #define SOC_EDMA3_CHMAPEXIST                0
 #define SOC_EDMA3_NUM_REGIONS               8
 #define SOC_EDMA3_MEMPROTECT                0
@@ -303,27 +303,27 @@ typedef struct EDMA3CCPaRAMEntry {
 typedef struct edmaContext {
     /* Channel mapping reg Val */
     unsigned int dchMap[64];
-    /* DMA Queue Number Register Val */    
-    unsigned int dmaQNum[8];    
-    
-    /* DMA Region Access Enable Register val */    
-    unsigned int regAccEnableLow;    
-    unsigned int regAccEnableHigh;        
+    /* DMA Queue Number Register Val */
+    unsigned int dmaQNum[8];
 
-    /* Event Set Register value */    
+    /* DMA Region Access Enable Register val */
+    unsigned int regAccEnableLow;
+    unsigned int regAccEnableHigh;
+
+    /* Event Set Register value */
     unsigned int eventSetRegLow;
-    unsigned int eventSetRegHigh;    
-    
-    /* Enable Event Set Register value */    
+    unsigned int eventSetRegHigh;
+
+    /* Enable Event Set Register value */
     unsigned int enableEvtSetRegLow;
     unsigned int enableEvtSetRegHigh;
-    
-    /* Interrupt Enable Set Register value */            
-    unsigned int intEnableSetRegLow;        
-    unsigned int intEnableSetRegHigh;    
-    
-    struct EDMA3CCPaRAMEntry dmaParEntry[512];    
-    
+
+    /* Interrupt Enable Set Register value */
+    unsigned int intEnableSetRegLow;
+    unsigned int intEnableSetRegHigh;
+
+    struct EDMA3CCPaRAMEntry dmaParEntry[512];
+
 } EDMACONTEXT;
 
 /****************************************************************************
